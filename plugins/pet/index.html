@@ -58,9 +58,17 @@ body { background: transparent; overflow: hidden; user-select: none; }
   <button onclick="sendMsg()">发送</button>
 </div>
 
+<script type="importmap">
+{
+  "imports": {
+    "three": "../../node_modules/three/build/three.module.js",
+    "three/addons/": "../../node_modules/three/examples/jsm/"
+  }
+}
+</script>
 <script type="module">
-import * as THREE from '../../node_modules/three/build/three.module.js'
-import { MMDLoader } from '../../node_modules/three/examples/jsm/loaders/MMDLoader.js'
+import * as THREE from 'three'
+import { MMDLoader } from 'three/addons/loaders/MMDLoader.js'
 
 const { ipc, readConfig, modelsDir } = window.electron
 const cfg = readConfig()
