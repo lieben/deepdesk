@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: transparent; overflow: hidden; user-select: none; }
+#c { display: block; }
+#bubble {
+  position: fixed; bottom: 410px; right: 10px;
+  max-width: 220px; display: none;
+  background: rgba(255,255,255,0.95); border-radius: 18px;
+  padding: 10px 14px; font-size: 13px; line-height: 1.5;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  border: 1.5px solid rgba(180,180,255,0.4);
+  color: #333; word-break: break-word;
+}
+#bubble::after {
+  content: ''; position: absolute; bottom: -10px; right: 30px;
+  border: 6px solid transparent; border-top-color: rgba(255,255,255,0.95);
+}
+#toolbar {
+  position: fixed; bottom: 5px; right: 5px;
+  display: flex; gap: 4px;
+}
+#toolbar button {
+  background: rgba(255,255,255,0.85); border: none; border-radius: 8px;
+  padding: 4px 7px; font-size: 11px; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+#toolbar button:hover { background: rgba(220,220,255,0.95); }
+#chat-input {
+  position: fixed; bottom: 35px; right: 5px; left: 5px;
+  display: none; gap: 4px;
+}
+#chat-input input {
+  flex: 1; border-radius: 12px; border: 1.5px solid #ccc;
+  padding: 5px 10px; font-size: 12px; outline: none;
+}
+#chat-input button {
+  border-radius: 10px; border: none; background: #7b8cde;
+  color: #fff; padding: 5px 10px; cursor: pointer; font-size: 12px;
+}
+</style>
+</head>
+<body>
+<canvas id="c" width="300" height="400"></canvas>
+<div id="bubble"></div>
+<div id="toolbar">
+  <button onclick="toggleChat()">💬</button>
+  <button onclick="capture('fullscreen')">📷</button>
+  <button onclick="capture('window')">🪟</button>
+  <button onclick="capture('free')">✂️</button>
+  <button onclick="switchMode()">🎮</button>
+  <button id="btn-dance" onclick="toggleDance()">🎵</button>
+</div>
+<div id="chat-input">
+  <input id="msg" placeholder="和我说话..." onkeydown="if(event.key==='Enter')sendMsg()">
+  <button onclick="sendMsg()">发送</button>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron')
+const path = require('path')
+const THREE = require('three')
+// MMDLoader via three addons
+const { MMDLoader } = require('three/examples/jsm/loaders/MMDLoader.js')
+const { MMDAnimationHelper } = require('three/examples/jsm/animation/MMDAnimationHelper.js')
+
+// ── 场景初始化 ──
+const canvas = document.getElementById('c')
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
+renderer.setSize(300, 400)
+renderer.setClearColor(0x000000, 0)
+
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera(25, 300/400, 0.1, 100)
+camera.position.set(0, 12, 30)
+camera.lookAt(0, 10, 0)
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.2))
+const dir = new THREE.DirectionalLight(0xffffff, 0.8)
+dir.position.set(5, 10, 5)
+scene.add(dir)
+
+const helper = new MMDAnimationHelper()
+let mesh = null, currentMotion = 'idle', dancing = false
+
+// ── 加载模型 ──
+const loader = new MMDLoader()
+const cfg = JSON.parse(require('fs').readFileSync(path.join(__dirname,'../../core/config.json'), 'utf8'))
+const modelPath = path.join(__dirname, '../../models/', cfg.activeModel)
+
+loader.load(modelPath, m => {
+  mesh = m
+  mesh.position.set(0, 0, 0)
+  scene.add(mesh)
+  loadMotion('idle')
+}, null, e => console.error('Model load error', e))
+
+function loadMotion(name) {
+  const vmdPath = path.join(__dirname, '../../motions/', name + '.vmd')
+  if (!require('fs').existsSync(vmdPath)) return
+  loader.loadAnimation(vmdPath, mesh, anim => {
+    helper.remove(mesh)
+    helper.add(mesh, { animation: anim, physics: true })
+    currentMotion = name
+  })
+}
+
+// ── 走路游荡 ──
+let walkTarget = { x: 0 }, walkDir = 1
+function updateWalk(delta) {
+  if (dancing || !mesh) return
+  mesh.position.x += walkDir * delta * 2
+  if (mesh.position.x > 3) { walkDir = -1; mesh.rotation.y = Math.PI }
+  if (mesh.position.x < -3) { walkDir = 1; mesh.rotation.y = 0 }
+  if (currentMotion !== 'walk') loadMotion('walk')
+}
+
+// ── 渲染循环 ──
+const clock = new THREE.Clock()
+function animate() {
+  requestAnimationFrame(animate)
+  const delta = clock.getDelta()
+  if (!dancing) updateWalk(delta)
+  helper.update(delta)
+  renderer.render(scene, camera)
+}
+animate()
+
+// ── 对话气泡 ──
+const bubble = document.getElementById('bubble')
+function showBubble(text, ms = 4000) {
+  bubble.textContent = text
+  bubble.style.display = 'block'
+  clearTimeout(bubble._t)
+  bubble._t = setTimeout(() => bubble.style.display = 'none', ms)
+}
+
+// ── 发送消息 ──
+const AGENT_CFG = cfg.agent  // { base_url, api_key, model, agent }
+let history = []
+async function sendMsg() {
+  const input = document.getElementById('msg')
+  const text = input.value.trim()
+  if (!text) return
+  input.value = ''
+  showBubble('...', 60000)
+  history.push({ role: 'user', content: text })
+  try {
+    const res = await fetch(`${AGENT_CFG.base_url}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AGENT_CFG.api_key}` },
+      body: JSON.stringify({ model: AGENT_CFG.model, messages: history, stream: false })
+    })
+    const data = await res.json()
+    const reply = data.choices[0].message.content
+    history.push({ role: 'assistant', content: reply })
+    showBubble(reply, 6000)
+    // 同步到galgame
+    ipcRenderer.send('plugin-msg', { type: 'chat-reply', text: reply, userText: text })
+  } catch(e) { showBubble('连接失败 (⊙_⊙)') }
+}
+
+function toggleChat() {
+  const el = document.getElementById('chat-input')
+  el.style.display = el.style.display === 'flex' ? 'none' : 'flex'
+}
+
+// ── 截图 ──
+async function capture(type) {
+  const dataUrl = await ipcRenderer.invoke('capture', type, {})
+  if (!dataUrl) return
+  if (type === 'free') { showFreeCapture(dataUrl); return }
+  const saved = await ipcRenderer.invoke('save-image', dataUrl)
+  if (saved) showBubble(`截图已保存 ✓`)
+}
+
+// 自由截图覆盖层
+function showFreeCapture(bgDataUrl) {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;inset:0;cursor:crosshair;z-index:9999;'
+  const bg = new Image(); bg.src = bgDataUrl
+  const cvs = document.createElement('canvas')
+  cvs.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
+  overlay.appendChild(cvs)
+  document.body.appendChild(overlay)
+  bg.onload = () => {
+    cvs.width = bg.width; cvs.height = bg.height
+    const ctx = cvs.getContext('2d'); ctx.drawImage(bg, 0, 0)
+    let start = null
+    overlay.onmousedown = e => { start = { x: e.clientX, y: e.clientY } }
+    overlay.onmouseup = async e => {
+      if (!start) return
+      const x = Math.min(start.x, e.clientX), y = Math.min(start.y, e.clientY)
+      const w = Math.abs(e.clientX - start.x), h = Math.abs(e.clientY - start.y)
+      const out = document.createElement('canvas'); out.width = w; out.height = h
+      out.getContext('2d').drawImage(cvs, x, y, w, h, 0, 0, w, h)
+      document.body.removeChild(overlay)
+      const saved = await ipcRenderer.invoke('save-image', out.toDataURL())
+      if (saved) showBubble(`截图已保存 ✓`)
+    }
+  }
+}
+
+// ── 跳舞 ──
+function toggleDance() {
+  dancing = !dancing
+  loadMotion(dancing ? 'dance' : 'idle')
+  document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
+}
+
+// ── 模式切换 ──
+function switchMode() { ipcRenderer.send('switch-mode', 'galgame') }
+
+// ── 接收galgame消息 ──
+ipcRenderer.on('plugin-msg', (e, msg) => {
+  if (msg.type === 'switch-to-pet') ipcRenderer.send('switch-mode', 'pet')
+  if (msg.type === 'chat-reply') showBubble(msg.text)
+})
+</script>
+</body>
+</html>

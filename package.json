@@ -1,0 +1,23 @@
+{
+  "name": "deepdesk",
+  "version": "0.1.0",
+  "description": "Desktop AI companion with MMD model",
+  "main": "core/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.deepdesk.app",
+    "productName": "DeepDesk",
+    "win": { "target": "portable" },
+    "files": ["core/**", "plugins/**", "models/**", "motions/**", "music/**", "node_modules/**"]
+  }
+}
