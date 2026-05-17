@@ -16,6 +16,7 @@ function createPetWindow() {
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
+  petWin.webContents.openDevTools({ mode: 'detach' })
   petWin.on('closed', () => { petWin = null })
 }
 
