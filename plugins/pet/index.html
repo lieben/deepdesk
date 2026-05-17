@@ -58,12 +58,12 @@ body { background: transparent; overflow: hidden; user-select: none; }
   <button onclick="sendMsg()">发送</button>
 </div>
 
-<script>
-const { ipcRenderer } = require('electron')
-const path = require('path')
-const fs = require('fs')
-const THREE = require('three')
-const { MMDLoader } = require('three/examples/jsm/loaders/MMDLoader.js')
+<script type="module">
+import * as THREE from '../../node_modules/three/build/three.module.js'
+import { MMDLoader } from '../../node_modules/three/examples/jsm/loaders/MMDLoader.js'
+
+const { ipc, readConfig, modelsDir } = window.electron
+const cfg = readConfig()
 
 // ── 场景 ──
 const canvas = document.getElementById('c')
@@ -78,26 +78,22 @@ scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 const dir = new THREE.DirectionalLight(0xffffff, 0.8)
 dir.position.set(5, 10, 5); scene.add(dir)
 
-const cfg = JSON.parse(fs.readFileSync(path.join(__dirname,'../../core/config.json'), 'utf8'))
 let mesh = null, skeleton = null
-let dancing = false, walkDir = 1
-let t = 0  // 动画时间
+let dancing = false, walkDir = 1, t = 0
 
-// ── PMX骨骼名映射（日文标准骨骼名）──
 const BONES = {
-  root:      ['センター', 'center', 'Center'],
-  spine:     ['上半身', 'spine', 'Spine'],
-  spine2:    ['上半身2', 'spine2'],
-  neck:      ['首', 'neck', 'Neck'],
-  head:      ['頭', 'head', 'Head'],
-  leftArm:   ['左腕', 'left arm', 'LeftArm'],
-  rightArm:  ['右腕', 'right arm', 'RightArm'],
-  leftElbow: ['左ひじ', 'left elbow', 'LeftElbow'],
-  rightElbow:['右ひじ', 'right elbow', 'RightElbow'],
-  leftLeg:   ['左足', 'left leg', 'LeftLeg'],
-  rightLeg:  ['右足', 'right leg', 'RightLeg'],
-  leftKnee:  ['左ひざ', 'left knee', 'LeftKnee'],
-  rightKnee: ['右ひざ', 'right knee', 'RightKnee'],
+  root:       ['センター', 'center', 'Center'],
+  spine:      ['上半身', 'spine', 'Spine'],
+  neck:       ['首', 'neck', 'Neck'],
+  head:       ['頭', 'head', 'Head'],
+  leftArm:    ['左腕', 'left arm', 'LeftArm'],
+  rightArm:   ['右腕', 'right arm', 'RightArm'],
+  leftElbow:  ['左ひじ', 'left elbow', 'LeftElbow'],
+  rightElbow: ['右ひじ', 'right elbow', 'RightElbow'],
+  leftLeg:    ['左足', 'left leg', 'LeftLeg'],
+  rightLeg:   ['右足', 'right leg', 'RightLeg'],
+  leftKnee:   ['左ひざ', 'left knee', 'LeftKnee'],
+  rightKnee:  ['右ひざ', 'right knee', 'RightKnee'],
 }
 
 function findBone(names) {
@@ -109,78 +105,62 @@ function findBone(names) {
   return null
 }
 
-// ── 程序化动画 ──
 function applyWalk(dt) {
   t += dt * 3
-  const s = Math.sin(t), c = Math.cos(t)
-
-  const leftLeg   = findBone(BONES.leftLeg)
-  const rightLeg  = findBone(BONES.rightLeg)
-  const leftKnee  = findBone(BONES.leftKnee)
-  const rightKnee = findBone(BONES.rightKnee)
-  const leftArm   = findBone(BONES.leftArm)
-  const rightArm  = findBone(BONES.rightArm)
-  const spine     = findBone(BONES.spine)
-
-  if (leftLeg)   leftLeg.rotation.x   =  s * 0.4
-  if (rightLeg)  rightLeg.rotation.x  = -s * 0.4
-  if (leftKnee)  leftKnee.rotation.x  = Math.max(0, -s) * 0.3
-  if (rightKnee) rightKnee.rotation.x = Math.max(0,  s) * 0.3
-  if (leftArm)   leftArm.rotation.x   = -s * 0.3
-  if (rightArm)  rightArm.rotation.x  =  s * 0.3
-  if (spine)     spine.rotation.z     =  s * 0.03
+  const s = Math.sin(t)
+  const ll = findBone(BONES.leftLeg), rl = findBone(BONES.rightLeg)
+  const lk = findBone(BONES.leftKnee), rk = findBone(BONES.rightKnee)
+  const la = findBone(BONES.leftArm), ra = findBone(BONES.rightArm)
+  const sp = findBone(BONES.spine)
+  if (ll) ll.rotation.x =  s * 0.4
+  if (rl) rl.rotation.x = -s * 0.4
+  if (lk) lk.rotation.x = Math.max(0, -s) * 0.3
+  if (rk) rk.rotation.x = Math.max(0,  s) * 0.3
+  if (la) la.rotation.x = -s * 0.3
+  if (ra) ra.rotation.x =  s * 0.3
+  if (sp) sp.rotation.z =  s * 0.03
 }
 
 function applyIdle(dt) {
   t += dt * 1.2
   const s = Math.sin(t)
-  const spine = findBone(BONES.spine)
-  const head  = findBone(BONES.head)
-  if (spine) spine.rotation.z = s * 0.015
-  if (head)  head.rotation.z  = s * 0.01
+  const sp = findBone(BONES.spine), hd = findBone(BONES.head)
+  if (sp) sp.rotation.z = s * 0.015
+  if (hd) hd.rotation.z = s * 0.01
 }
 
 function applyDance(dt) {
   t += dt * 4
   const s = Math.sin(t), c = Math.cos(t), s2 = Math.sin(t * 2)
-
-  const spine     = findBone(BONES.spine)
-  const leftArm   = findBone(BONES.leftArm)
-  const rightArm  = findBone(BONES.rightArm)
-  const leftElbow = findBone(BONES.leftElbow)
-  const rightElbow= findBone(BONES.rightElbow)
-  const leftLeg   = findBone(BONES.leftLeg)
-  const rightLeg  = findBone(BONES.rightLeg)
-  const head      = findBone(BONES.head)
-
-  if (spine)      { spine.rotation.z = s * 0.12; spine.rotation.x = c * 0.05 }
-  if (leftArm)    leftArm.rotation.z  =  0.8 + s * 0.4
-  if (rightArm)   rightArm.rotation.z = -0.8 - s * 0.4
-  if (leftElbow)  leftElbow.rotation.z =  s2 * 0.3
-  if (rightElbow) rightElbow.rotation.z = -s2 * 0.3
-  if (leftLeg)    leftLeg.rotation.x  =  s * 0.25
-  if (rightLeg)   rightLeg.rotation.x = -s * 0.25
-  if (head)       head.rotation.z     =  s * 0.08
+  const sp = findBone(BONES.spine)
+  const la = findBone(BONES.leftArm), ra = findBone(BONES.rightArm)
+  const le = findBone(BONES.leftElbow), re = findBone(BONES.rightElbow)
+  const ll = findBone(BONES.leftLeg), rl = findBone(BONES.rightLeg)
+  const hd = findBone(BONES.head)
+  if (sp) { sp.rotation.z = s * 0.12; sp.rotation.x = c * 0.05 }
+  if (la) la.rotation.z =  0.8 + s * 0.4
+  if (ra) ra.rotation.z = -0.8 - s * 0.4
+  if (le) le.rotation.z =  s2 * 0.3
+  if (re) re.rotation.z = -s2 * 0.3
+  if (ll) ll.rotation.x =  s * 0.25
+  if (rl) rl.rotation.x = -s * 0.25
+  if (hd) hd.rotation.z =  s * 0.08
 }
 
 // ── 加载模型 ──
-const loader = new MMDLoader()
-const modelPath = path.join(__dirname, '../../models/', cfg.activeModel)
-loader.load(modelPath, m => {
-  mesh = m
-  skeleton = m.skeleton
-  scene.add(mesh)
-}, null, e => {
-  // 模型加载失败时显示占位方块
-  console.warn('Model load failed, using placeholder', e)
+const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
+new MMDLoader().load(modelUrl, m => {
+  mesh = m; skeleton = m.skeleton; scene.add(mesh)
+  console.log('Model loaded:', cfg.activeModel)
+}, xhr => {
+  console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
+}, e => {
+  console.error('Model load failed:', e)
   const geo = new THREE.BoxGeometry(2, 6, 1)
-  const mat = new THREE.MeshPhongMaterial({ color: 0xffaacc })
-  mesh = new THREE.Mesh(geo, mat)
-  mesh.position.y = 3
-  scene.add(mesh)
+  mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: 0xffaacc }))
+  mesh.position.y = 3; scene.add(mesh)
 })
 
-// ── 走路游荡 ──
 function updateWalkPosition(delta) {
   if (!mesh || dancing) return
   mesh.position.x += walkDir * delta * 1.5
@@ -188,16 +168,15 @@ function updateWalkPosition(delta) {
   if (mesh.position.x < -2.5) { walkDir =  1; mesh.rotation.y = 0 }
 }
 
-// ── 渲染循环 ──
 const clock = new THREE.Clock()
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
   if (skeleton) {
-    if (dancing)       applyDance(delta)
-    else if (mesh)     { applyWalk(delta); updateWalkPosition(delta) }
-  } else if (mesh && !skeleton) {
-    applyIdle(delta)  // 占位方块也动一动
+    if (dancing) applyDance(delta)
+    else { applyWalk(delta); updateWalkPosition(delta) }
+  } else if (mesh) {
+    applyIdle(delta)
   }
   renderer.render(scene, camera)
 }
@@ -214,7 +193,7 @@ function showBubble(text, ms = 5000) {
 
 // ── 对话 ──
 let history = []
-async function sendMsg() {
+window.sendMsg = async function() {
   const input = document.getElementById('msg')
   const text = input.value.trim(); if (!text) return
   input.value = ''
@@ -230,22 +209,21 @@ async function sendMsg() {
     const reply = data.choices[0].message.content
     history.push({ role: 'assistant', content: reply })
     showBubble(reply, 6000)
-    ipcRenderer.send('plugin-msg', { type: 'chat-reply', text: reply, userText: text })
+    ipc.send('plugin-msg', { type: 'chat-reply', text: reply })
   } catch(e) { showBubble('连接失败 (⊙_⊙)') }
 }
 
-function toggleChat() {
+window.toggleChat = function() {
   const el = document.getElementById('chat-input')
   el.style.display = el.style.display === 'flex' ? 'none' : 'flex'
   if (el.style.display === 'flex') document.getElementById('msg').focus()
 }
 
-// ── 截图 ──
-async function capture(type) {
-  const dataUrl = await ipcRenderer.invoke('capture', type, {})
+window.capture = async function(type) {
+  const dataUrl = await ipc.invoke('capture', type, {})
   if (!dataUrl) return
   if (type === 'free') { showFreeCapture(dataUrl); return }
-  const saved = await ipcRenderer.invoke('save-image', dataUrl)
+  const saved = await ipc.invoke('save-image', dataUrl)
   if (saved) showBubble('截图已保存 ✓')
 }
 
@@ -268,22 +246,20 @@ function showFreeCapture(bgDataUrl) {
       const out = document.createElement('canvas'); out.width = w; out.height = h
       out.getContext('2d').drawImage(cvs, x, y, w, h, 0, 0, w, h)
       document.body.removeChild(overlay)
-      const saved = await ipcRenderer.invoke('save-image', out.toDataURL())
+      const saved = await ipc.invoke('save-image', out.toDataURL())
       if (saved) showBubble('截图已保存 ✓')
     }
   }
 }
 
-// ── 跳舞 ──
-function toggleDance() {
-  dancing = !dancing
-  t = 0
+window.toggleDance = function() {
+  dancing = !dancing; t = 0
   document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
 }
 
-function switchMode() { ipcRenderer.send('switch-mode', 'galgame') }
+window.switchMode = function() { ipc.send('switch-mode', 'galgame') }
 
-ipcRenderer.on('plugin-msg', (e, msg) => {
+ipc.on('plugin-msg', (e, msg) => {
   if (msg.type === 'chat-reply') showBubble(msg.text)
 })
 </script>
