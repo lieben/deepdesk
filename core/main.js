@@ -9,12 +9,13 @@ let currentMode = 'pet'
 function createPetWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   petWin = new BrowserWindow({
-    width: 300, height: 400,
-    x: width - 320, y: height - 420,
+    width, height, x: 0, y: 0,
     transparent: true, frame: false, alwaysOnTop: true,
-    resizable: false, skipTaskbar: true,
+    resizable: false, skipTaskbar: true, hasShadow: false,
+    focusable: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false }
   })
+  petWin.setIgnoreMouseEvents(true, { forward: true })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
   petWin.webContents.openDevTools({ mode: 'detach' })
   petWin.on('closed', () => { petWin = null })

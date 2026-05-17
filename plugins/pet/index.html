@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { background: transparent; overflow: hidden; user-select: none; }
-#c { display: block; }
+html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
+#c { display: block; width: 100vw; height: 100vh; pointer-events: none; }
+#bubble, #toolbar, #toolbar button, #chat-input, #chat-input input, #chat-input button { pointer-events: auto; }
 #bubble {
-  position: fixed; bottom: 410px; right: 10px;
-  max-width: 220px; display: none;
+  position: fixed; bottom: 38vh; right: 30px;
+  max-width: 280px; display: none;
   background: rgba(255,255,255,0.95); border-radius: 18px;
   padding: 10px 14px; font-size: 13px; line-height: 1.5;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
@@ -76,12 +77,27 @@ const cfg = readConfig()
 // ── 场景 ──
 const canvas = document.getElementById('c')
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
-renderer.setSize(300, 400)
+renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setClearColor(0x000000, 0)
 const scene = new THREE.Scene()
-const camera = new THREE.PerspectiveCamera(25, 300/400, 0.1, 100)
-camera.position.set(0, 12, 30)
-camera.lookAt(0, 10, 0)
+// 正交相机：1单位=1像素，模型脚底贴底边
+let camera
+function buildCamera() {
+  const w = window.innerWidth, h = window.innerHeight
+  camera = new THREE.OrthographicCamera(-w/2, w/2, h, 0, -1000, 1000)
+  camera.position.set(0, 0, 100)
+  camera.lookAt(0, h/2, 0)
+}
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight
+  renderer.setSize(w, h, false)
+  if (camera) {
+    camera.left = -w/2; camera.right = w/2; camera.top = h; camera.bottom = 0
+    camera.updateProjectionMatrix()
+  }
+}
+buildCamera(); resize()
+window.addEventListener('resize', resize)
 scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 const dir = new THREE.DirectionalLight(0xffffff, 0.8)
 dir.position.set(5, 10, 5); scene.add(dir)
@@ -156,24 +172,39 @@ function applyDance(dt) {
 }
 
 // ── 加载模型 ──
+let modelHeightPx = 300   // 模型在屏幕上实际像素高
+let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
 new MMDLoader().load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
-  console.log('Model loaded:', cfg.activeModel)
+  // 自动缩放：测原始高度→缩到屏高的 35%
+  const box = new THREE.Box3().setFromObject(mesh)
+  const rawH = box.max.y - box.min.y || 20
+  const targetPx = window.innerHeight * 0.35
+  const scale = targetPx / rawH
+  mesh.scale.setScalar(scale)
+  modelHeightPx = targetPx
+  // 重新算包围盒，把脚底放到 y=0 (屏幕底)
+  const box2 = new THREE.Box3().setFromObject(mesh)
+  mesh.position.y = -box2.min.y
+  // 走路范围：左右各留半个模型宽
+  const halfW = (box2.max.x - box2.min.x) / 2
+  walkBoundLeft  = -window.innerWidth/2 + halfW + 20
+  walkBoundRight =  window.innerWidth/2 - halfW - 20
+  mesh.position.x = walkBoundLeft
+  console.log('Model loaded:', cfg.activeModel, 'scale=', scale.toFixed(3))
 }, xhr => {
   console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
 }, e => {
   console.error('Model load failed:', e)
-  const geo = new THREE.BoxGeometry(2, 6, 1)
-  mesh = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({ color: 0xffaacc }))
-  mesh.position.y = 3; scene.add(mesh)
 })
 
 function updateWalkPosition(delta) {
   if (!mesh || dancing) return
-  mesh.position.x += walkDir * delta * 1.5
-  if (mesh.position.x > 2.5)  { walkDir = -1; mesh.rotation.y = Math.PI }
-  if (mesh.position.x < -2.5) { walkDir =  1; mesh.rotation.y = 0 }
+  // 走路速度：每秒 80 像素
+  mesh.position.x += walkDir * delta * 80
+  if (mesh.position.x > walkBoundRight) { walkDir = -1; mesh.rotation.y = Math.PI }
+  if (mesh.position.x < walkBoundLeft)  { walkDir =  1; mesh.rotation.y = 0 }
 }
 
 const clock = new THREE.Clock()
