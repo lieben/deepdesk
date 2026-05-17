@@ -71,8 +71,17 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 import * as THREE from 'three'
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js'
 
-const { ipc, readConfig, modelsDir } = window.electron
+const { ipc, readConfig, modelsDir, setIgnoreMouse } = window.electron
 const cfg = readConfig()
+
+// ── 鼠标穿透动态切换：UI区域hover时关穿透，离开后开穿透 ──
+// 默认整窗穿透（鼠标可点桌面图标），UI hover时临时禁穿透接收点击
+;['bubble', 'toolbar', 'chat-input'].forEach(id => {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.addEventListener('mouseenter', () => setIgnoreMouse(false))
+  el.addEventListener('mouseleave', () => setIgnoreMouse(true))
+})
 
 // ── 场景 ──
 const canvas = document.getElementById('c')
@@ -177,10 +186,10 @@ let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
 new MMDLoader().load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
-  // 自动缩放：测原始高度→缩到屏高的 35%
+  // 自动缩放：测原始高度→缩到屏高的 22%
   const box = new THREE.Box3().setFromObject(mesh)
   const rawH = box.max.y - box.min.y || 20
-  const targetPx = window.innerHeight * 0.35
+  const targetPx = window.innerHeight * 0.22
   const scale = targetPx / rawH
   mesh.scale.setScalar(scale)
   modelHeightPx = targetPx

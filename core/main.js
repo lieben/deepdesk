@@ -16,6 +16,9 @@ function createPetWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false }
   })
   petWin.setIgnoreMouseEvents(true, { forward: true })
+  ipcMain.on('pet-set-ignore', (e, ignore) => {
+    if (petWin) petWin.setIgnoreMouseEvents(ignore, { forward: true })
+  })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
   petWin.webContents.openDevTools({ mode: 'detach' })
   petWin.on('closed', () => { petWin = null })
