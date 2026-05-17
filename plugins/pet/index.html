@@ -11,13 +11,13 @@ body { background: transparent; overflow: hidden; user-select: none; }
   max-width: 220px; display: none;
   background: rgba(255,255,255,0.95); border-radius: 18px;
   padding: 10px 14px; font-size: 13px; line-height: 1.5;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  border: 1.5px solid rgba(180,180,255,0.4);
-  color: #333; word-break: break-word;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  color: #333; word-break: break-all;
 }
 #bubble::after {
-  content: ''; position: absolute; bottom: -10px; right: 30px;
-  border: 6px solid transparent; border-top-color: rgba(255,255,255,0.95);
+  content: ''; position: absolute; bottom: -8px; right: 24px;
+  border: 8px solid transparent; border-top-color: rgba(255,255,255,0.95);
+  border-bottom: 0;
 }
 #toolbar {
   position: fixed; bottom: 5px; right: 5px;
@@ -49,7 +49,6 @@ body { background: transparent; overflow: hidden; user-select: none; }
 <div id="toolbar">
   <button onclick="toggleChat()">💬</button>
   <button onclick="capture('fullscreen')">📷</button>
-  <button onclick="capture('window')">🪟</button>
   <button onclick="capture('free')">✂️</button>
   <button onclick="switchMode()">🎮</button>
   <button id="btn-dance" onclick="toggleDance()">🎵</button>
@@ -62,60 +61,131 @@ body { background: transparent; overflow: hidden; user-select: none; }
 <script>
 const { ipcRenderer } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const THREE = require('three')
-// MMDLoader via three addons
 const { MMDLoader } = require('three/examples/jsm/loaders/MMDLoader.js')
-const { MMDAnimationHelper } = require('three/examples/jsm/animation/MMDAnimationHelper.js')
 
-// ── 场景初始化 ──
+// ── 场景 ──
 const canvas = document.getElementById('c')
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setSize(300, 400)
 renderer.setClearColor(0x000000, 0)
-
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(25, 300/400, 0.1, 100)
 camera.position.set(0, 12, 30)
 camera.lookAt(0, 10, 0)
-
 scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-dir.position.set(5, 10, 5)
-scene.add(dir)
+dir.position.set(5, 10, 5); scene.add(dir)
 
-const helper = new MMDAnimationHelper()
-let mesh = null, currentMotion = 'idle', dancing = false
+const cfg = JSON.parse(fs.readFileSync(path.join(__dirname,'../../core/config.json'), 'utf8'))
+let mesh = null, skeleton = null
+let dancing = false, walkDir = 1
+let t = 0  // 动画时间
+
+// ── PMX骨骼名映射（日文标准骨骼名）──
+const BONES = {
+  root:      ['センター', 'center', 'Center'],
+  spine:     ['上半身', 'spine', 'Spine'],
+  spine2:    ['上半身2', 'spine2'],
+  neck:      ['首', 'neck', 'Neck'],
+  head:      ['頭', 'head', 'Head'],
+  leftArm:   ['左腕', 'left arm', 'LeftArm'],
+  rightArm:  ['右腕', 'right arm', 'RightArm'],
+  leftElbow: ['左ひじ', 'left elbow', 'LeftElbow'],
+  rightElbow:['右ひじ', 'right elbow', 'RightElbow'],
+  leftLeg:   ['左足', 'left leg', 'LeftLeg'],
+  rightLeg:  ['右足', 'right leg', 'RightLeg'],
+  leftKnee:  ['左ひざ', 'left knee', 'LeftKnee'],
+  rightKnee: ['右ひざ', 'right knee', 'RightKnee'],
+}
+
+function findBone(names) {
+  if (!skeleton) return null
+  for (const name of names) {
+    const b = skeleton.bones.find(b => b.name === name || b.name.toLowerCase() === name.toLowerCase())
+    if (b) return b
+  }
+  return null
+}
+
+// ── 程序化动画 ──
+function applyWalk(dt) {
+  t += dt * 3
+  const s = Math.sin(t), c = Math.cos(t)
+
+  const leftLeg   = findBone(BONES.leftLeg)
+  const rightLeg  = findBone(BONES.rightLeg)
+  const leftKnee  = findBone(BONES.leftKnee)
+  const rightKnee = findBone(BONES.rightKnee)
+  const leftArm   = findBone(BONES.leftArm)
+  const rightArm  = findBone(BONES.rightArm)
+  const spine     = findBone(BONES.spine)
+
+  if (leftLeg)   leftLeg.rotation.x   =  s * 0.4
+  if (rightLeg)  rightLeg.rotation.x  = -s * 0.4
+  if (leftKnee)  leftKnee.rotation.x  = Math.max(0, -s) * 0.3
+  if (rightKnee) rightKnee.rotation.x = Math.max(0,  s) * 0.3
+  if (leftArm)   leftArm.rotation.x   = -s * 0.3
+  if (rightArm)  rightArm.rotation.x  =  s * 0.3
+  if (spine)     spine.rotation.z     =  s * 0.03
+}
+
+function applyIdle(dt) {
+  t += dt * 1.2
+  const s = Math.sin(t)
+  const spine = findBone(BONES.spine)
+  const head  = findBone(BONES.head)
+  if (spine) spine.rotation.z = s * 0.015
+  if (head)  head.rotation.z  = s * 0.01
+}
+
+function applyDance(dt) {
+  t += dt * 4
+  const s = Math.sin(t), c = Math.cos(t), s2 = Math.sin(t * 2)
+
+  const spine     = findBone(BONES.spine)
+  const leftArm   = findBone(BONES.leftArm)
+  const rightArm  = findBone(BONES.rightArm)
+  const leftElbow = findBone(BONES.leftElbow)
+  const rightElbow= findBone(BONES.rightElbow)
+  const leftLeg   = findBone(BONES.leftLeg)
+  const rightLeg  = findBone(BONES.rightLeg)
+  const head      = findBone(BONES.head)
+
+  if (spine)      { spine.rotation.z = s * 0.12; spine.rotation.x = c * 0.05 }
+  if (leftArm)    leftArm.rotation.z  =  0.8 + s * 0.4
+  if (rightArm)   rightArm.rotation.z = -0.8 - s * 0.4
+  if (leftElbow)  leftElbow.rotation.z =  s2 * 0.3
+  if (rightElbow) rightElbow.rotation.z = -s2 * 0.3
+  if (leftLeg)    leftLeg.rotation.x  =  s * 0.25
+  if (rightLeg)   rightLeg.rotation.x = -s * 0.25
+  if (head)       head.rotation.z     =  s * 0.08
+}
 
 // ── 加载模型 ──
 const loader = new MMDLoader()
-const cfg = JSON.parse(require('fs').readFileSync(path.join(__dirname,'../../core/config.json'), 'utf8'))
 const modelPath = path.join(__dirname, '../../models/', cfg.activeModel)
-
 loader.load(modelPath, m => {
   mesh = m
-  mesh.position.set(0, 0, 0)
+  skeleton = m.skeleton
   scene.add(mesh)
-  loadMotion('idle')
-}, null, e => console.error('Model load error', e))
-
-function loadMotion(name) {
-  const vmdPath = path.join(__dirname, '../../motions/', name + '.vmd')
-  if (!require('fs').existsSync(vmdPath)) return
-  loader.loadAnimation(vmdPath, mesh, anim => {
-    helper.remove(mesh)
-    helper.add(mesh, { animation: anim, physics: true })
-    currentMotion = name
-  })
-}
+}, null, e => {
+  // 模型加载失败时显示占位方块
+  console.warn('Model load failed, using placeholder', e)
+  const geo = new THREE.BoxGeometry(2, 6, 1)
+  const mat = new THREE.MeshPhongMaterial({ color: 0xffaacc })
+  mesh = new THREE.Mesh(geo, mat)
+  mesh.position.y = 3
+  scene.add(mesh)
+})
 
 // ── 走路游荡 ──
-let walkTarget = { x: 0 }, walkDir = 1
-function updateWalk(delta) {
-  if (dancing || !mesh) return
-  mesh.position.x += walkDir * delta * 2
-  if (mesh.position.x > 3) { walkDir = -1; mesh.rotation.y = Math.PI }
-  if (mesh.position.x < -3) { walkDir = 1; mesh.rotation.y = 0 }
-  if (currentMotion !== 'walk') loadMotion('walk')
+function updateWalkPosition(delta) {
+  if (!mesh || dancing) return
+  mesh.position.x += walkDir * delta * 1.5
+  if (mesh.position.x > 2.5)  { walkDir = -1; mesh.rotation.y = Math.PI }
+  if (mesh.position.x < -2.5) { walkDir =  1; mesh.rotation.y = 0 }
 }
 
 // ── 渲染循环 ──
@@ -123,42 +193,43 @@ const clock = new THREE.Clock()
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
-  if (!dancing) updateWalk(delta)
-  helper.update(delta)
+  if (skeleton) {
+    if (dancing)       applyDance(delta)
+    else if (mesh)     { applyWalk(delta); updateWalkPosition(delta) }
+  } else if (mesh && !skeleton) {
+    applyIdle(delta)  // 占位方块也动一动
+  }
   renderer.render(scene, camera)
 }
 animate()
 
-// ── 对话气泡 ──
+// ── 气泡 ──
 const bubble = document.getElementById('bubble')
-function showBubble(text, ms = 4000) {
+function showBubble(text, ms = 5000) {
   bubble.textContent = text
   bubble.style.display = 'block'
   clearTimeout(bubble._t)
   bubble._t = setTimeout(() => bubble.style.display = 'none', ms)
 }
 
-// ── 发送消息 ──
-const AGENT_CFG = cfg.agent  // { base_url, api_key, model, agent }
+// ── 对话 ──
 let history = []
 async function sendMsg() {
   const input = document.getElementById('msg')
-  const text = input.value.trim()
-  if (!text) return
+  const text = input.value.trim(); if (!text) return
   input.value = ''
   showBubble('...', 60000)
   history.push({ role: 'user', content: text })
   try {
-    const res = await fetch(`${AGENT_CFG.base_url}/chat/completions`, {
+    const res = await fetch(`${cfg.agent.base_url}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AGENT_CFG.api_key}` },
-      body: JSON.stringify({ model: AGENT_CFG.model, messages: history, stream: false })
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.agent.api_key}` },
+      body: JSON.stringify({ model: cfg.agent.model, messages: history, stream: false })
     })
     const data = await res.json()
     const reply = data.choices[0].message.content
     history.push({ role: 'assistant', content: reply })
     showBubble(reply, 6000)
-    // 同步到galgame
     ipcRenderer.send('plugin-msg', { type: 'chat-reply', text: reply, userText: text })
   } catch(e) { showBubble('连接失败 (⊙_⊙)') }
 }
@@ -166,6 +237,7 @@ async function sendMsg() {
 function toggleChat() {
   const el = document.getElementById('chat-input')
   el.style.display = el.style.display === 'flex' ? 'none' : 'flex'
+  if (el.style.display === 'flex') document.getElementById('msg').focus()
 }
 
 // ── 截图 ──
@@ -174,18 +246,16 @@ async function capture(type) {
   if (!dataUrl) return
   if (type === 'free') { showFreeCapture(dataUrl); return }
   const saved = await ipcRenderer.invoke('save-image', dataUrl)
-  if (saved) showBubble(`截图已保存 ✓`)
+  if (saved) showBubble('截图已保存 ✓')
 }
 
-// 自由截图覆盖层
 function showFreeCapture(bgDataUrl) {
   const overlay = document.createElement('div')
   overlay.style.cssText = 'position:fixed;inset:0;cursor:crosshair;z-index:9999;'
   const bg = new Image(); bg.src = bgDataUrl
   const cvs = document.createElement('canvas')
   cvs.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
-  overlay.appendChild(cvs)
-  document.body.appendChild(overlay)
+  overlay.appendChild(cvs); document.body.appendChild(overlay)
   bg.onload = () => {
     cvs.width = bg.width; cvs.height = bg.height
     const ctx = cvs.getContext('2d'); ctx.drawImage(bg, 0, 0)
@@ -199,7 +269,7 @@ function showFreeCapture(bgDataUrl) {
       out.getContext('2d').drawImage(cvs, x, y, w, h, 0, 0, w, h)
       document.body.removeChild(overlay)
       const saved = await ipcRenderer.invoke('save-image', out.toDataURL())
-      if (saved) showBubble(`截图已保存 ✓`)
+      if (saved) showBubble('截图已保存 ✓')
     }
   }
 }
@@ -207,16 +277,13 @@ function showFreeCapture(bgDataUrl) {
 // ── 跳舞 ──
 function toggleDance() {
   dancing = !dancing
-  loadMotion(dancing ? 'dance' : 'idle')
+  t = 0
   document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
 }
 
-// ── 模式切换 ──
 function switchMode() { ipcRenderer.send('switch-mode', 'galgame') }
 
-// ── 接收galgame消息 ──
 ipcRenderer.on('plugin-msg', (e, msg) => {
-  if (msg.type === 'switch-to-pet') ipcRenderer.send('switch-mode', 'pet')
   if (msg.type === 'chat-reply') showBubble(msg.text)
 })
 </script>
