@@ -13,7 +13,7 @@ function createPetWindow() {
     x: width - 320, y: height - 420,
     transparent: true, frame: false, alwaysOnTop: true,
     resizable: false, skipTaskbar: true,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: false }
   })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
   petWin.webContents.openDevTools({ mode: 'detach' })
