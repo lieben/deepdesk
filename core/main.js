@@ -6,6 +6,26 @@ const fs = require('fs')
 let petWin = null, galgameWin = null
 let currentMode = 'pet'
 
+const statePath = path.join(app.getPath('userData'), 'window-state.json')
+function readWindowState() {
+  try { return JSON.parse(fs.readFileSync(statePath, 'utf8')) } catch { return {} }
+}
+function writeWindowState(state) {
+  try { fs.mkdirSync(path.dirname(statePath), { recursive: true }); fs.writeFileSync(statePath, JSON.stringify(state, null, 2)) } catch (e) { console.warn('[state] save failed', e) }
+}
+function saveGalBounds() {
+  if (!galgameWin || galgameWin.isDestroyed()) return
+  const state = readWindowState()
+  state.galgameBounds = galgameWin.getBounds()
+  writeWindowState(state)
+}
+function getDefaultGalBounds() {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const saved = readWindowState().galgameBounds
+  if (saved && saved.width >= 320 && saved.height >= 520) return saved
+  return { width: 430, height: 760, x: Math.floor((width - 430) / 2), y: Math.floor((height - 760) / 2) }
+}
+
 function createPetWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   petWin = new BrowserWindow({
@@ -25,15 +45,19 @@ function createPetWindow() {
 }
 
 function createGalgameWindow() {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const bounds = getDefaultGalBounds()
   galgameWin = new BrowserWindow({
-    // 手机比例 Galgame 窗口：9:16，居中显示
-    width: 430, height: 760,
-    x: Math.floor((width - 430) / 2), y: Math.floor((height - 760) / 2),
-    transparent: true, frame: false, alwaysOnTop: true, resizable: false,
+    // 手机比例 Galgame 窗口：首次9:16居中；之后恢复用户上次大小/位置
+    ...bounds,
+    minWidth: 320, minHeight: 520,
+    transparent: true, frame: false, alwaysOnTop: true, resizable: true,
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   })
   galgameWin.loadFile(path.join(__dirname, '../plugins/galgame/index.html'))
+  galgameWin.on('move', saveGalBounds)
+  galgameWin.on('resize', saveGalBounds)
+  galgameWin.on('hide', saveGalBounds)
+  galgameWin.on('close', saveGalBounds)
   galgameWin.on('closed', () => { galgameWin = null })
 }
 
