@@ -39,8 +39,21 @@ function createPetWindow() {
   ipcMain.on('pet-set-ignore', (e, ignore) => {
     if (petWin) petWin.setIgnoreMouseEvents(ignore, { forward: true })
   })
+  petWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    // Electron: 0=verbose, 1=info, 2=warning, 3=error
+    const levels = ['debug', 'info', 'warn', 'error']
+    const tag = levels[level] || `level${level}`
+    const out = level >= 3 ? console.error : console.log
+    out(`[pet:${tag}] ${message}`)
+  })
+  petWin.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[pet:load-fail]', errorCode, errorDescription, validatedURL)
+  })
+  petWin.webContents.on('render-process-gone', (event, details) => {
+    console.error('[pet:render-gone]', details)
+  })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
-  petWin.webContents.openDevTools({ mode: 'detach' })
+  if (process.env.DEEPDESK_DEVTOOLS === '1') petWin.webContents.openDevTools({ mode: 'detach' })
   petWin.on('closed', () => { petWin = null })
 }
 

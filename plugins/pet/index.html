@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file: data: blob:; script-src 'self' file: 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob:; connect-src 'self' file: data: blob:; worker-src 'self' blob:;">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
@@ -69,7 +70,7 @@ import * as THREE from 'three'
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js'
 import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js'
 
-const { ipc, readConfig, modelsDir, setIgnoreMouse } = window.electron
+const { ipc, readConfig, modelsDir, motionsDir, setIgnoreMouse } = window.electron
 const cfg = readConfig()
 
 // ── 鼠标穿透动态切换 ──
@@ -141,10 +142,30 @@ let helper = null
 let walkClip = null, idleClip = null, danceClip = null, currentClip = null
 let vmdReady = false
 const loader = new MMDLoader()
+function fileUrl(absPath) {
+  const normalized = String(absPath || '').replace(/\\/g, '/')
+  if (!normalized) return ''
+  if (/^[A-Za-z]:\//.test(normalized)) return 'file:///' + encodeURI(normalized)
+  return 'file://' + encodeURI(normalized.startsWith('/') ? normalized : '/' + normalized)
+}
+function joinPath(base, file) {
+  return String(base || '').replace(/[\\/]+$/, '') + '/' + file
+}
+
+// 主动作使用言言放在 D:\Projects\DeepDesk\motions 的文件；旧 vmds 只作为兜底。
 const VMD = {
-  walk: new URL('./vmds/2.歩き10L_(40f_前移動20).vmd', import.meta.url).href,
-  idle: new URL('./vmds/ぼんやり待ち合わせ_腕広いver(465f).vmd', import.meta.url).href,
-  dance: new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href,
+  walk: [
+    fileUrl(joinPath(motionsDir, 'Walking.vmd')),
+    new URL('./vmds/2.歩き10L_(40f_前移動20).vmd', import.meta.url).href,
+  ],
+  idle: [
+    fileUrl(joinPath(motionsDir, 'Sitting.vmd')),
+    new URL('./vmds/ぼんやり待ち合わせ_腕広いver(465f).vmd', import.meta.url).href,
+  ],
+  dance: [
+    fileUrl(joinPath(motionsDir, 'Sitting.vmd')),
+    new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href,
+  ],
 }
 
 function playClip(next) {
@@ -156,19 +177,26 @@ function playClip(next) {
   currentClip = next
   window.__mmdHelper = helper
   window.__currentClip = currentClip
-  console.warn('[VMD] playing via MMDAnimationHelper:', next.name || 'clip', 'duration=', next.duration.toFixed(2))
+  console.log('[VMD] playing via MMDAnimationHelper:', next.name || 'clip', 'duration=', next.duration.toFixed(2))
 }
 
-function loadVMDClip(name, url) {
+function loadVMDClip(name, urls) {
+  const list = Array.isArray(urls) ? urls.filter(Boolean) : [urls].filter(Boolean)
   return new Promise(resolve => {
-    loader.loadAnimation(url, mesh, clip => {
-      clip.name = name
-      console.warn('[VMD] loaded', name, 'duration=', clip.duration.toFixed(2), 'tracks=', clip.tracks.length)
-      resolve(clip)
-    }, undefined, err => {
-      console.error('[VMD] load failed', name, url, err)
-      resolve(null)
-    })
+    let i = 0
+    const tryNext = () => {
+      const url = list[i++]
+      if (!url) { resolve(null); return }
+      loader.loadAnimation(url, mesh, clip => {
+        clip.name = name
+        console.log('[VMD] loaded', name, url, 'duration=', clip.duration.toFixed(2), 'tracks=', clip.tracks.length)
+        resolve(clip)
+      }, undefined, err => {
+        console.error('[VMD] load failed, trying fallback if any:', name, url, err)
+        tryNext()
+      })
+    }
+    tryNext()
   })
 }
 
@@ -180,11 +208,11 @@ async function setupVMDAnimations() {
     loadVMDClip('idle', VMD.idle),
     loadVMDClip('dance', VMD.dance),
   ])
-  vmdReady = !!walkClip
+  vmdReady = !!(walkClip || idleClip)
   playClip(walkClip || idleClip)
   window.__mmdHelper = helper
   window.__clips = { walkClip, idleClip, danceClip }
-  console.warn('[VMD] ready via MMDAnimationHelper=', vmdReady, 'clips=', window.__clips)
+  console.log('[VMD] ready via MMDAnimationHelper=', vmdReady, 'clips=', window.__clips)
 }
 
 const BONES = {
@@ -279,7 +307,7 @@ function applyDance(dt) {
 let modelHeightPx = 300   // 模型在屏幕上实际像素高
 let modelWidthPx = 120
 let walkBoundLeft = 0, walkBoundRight = 0
-const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
+const modelUrl = fileUrl(joinPath(modelsDir, cfg.activeModel))
 loader.load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
   // 暴露到window便于Console调试
@@ -294,8 +322,8 @@ loader.load(modelUrl, m => {
     if (mat && mat.emissiveMap) mat.emissiveMap[csKey] = csVal
     if (mat) mat.needsUpdate = true
   })
-  console.warn('[BONES] count=', skeleton.bones.length)
-  console.warn('[MAT] count=', mats.length, 'textures fixed=', texCount,
+  console.log('[BONES] count=', skeleton.bones.length)
+  console.log('[MAT] count=', mats.length, 'textures fixed=', texCount,
                'renderer.outputColorSpace=', renderer.outputColorSpace,
                'renderer.toneMapping=', renderer.toneMapping)
   // 自动缩放：测原始高度→缩到屏高的 22%
@@ -319,7 +347,7 @@ loader.load(modelUrl, m => {
               'targetPx=', targetPx, 'pos=', mesh.position.toArray().map(v => v.toFixed(1)))
   setupVMDAnimations()
 }, xhr => {
-  console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
+  if (xhr.total) console.log('Loading:', Math.round(xhr.loaded / xhr.total * 100) + '%')
 }, e => {
   console.error('Model load failed:', e)
 })
@@ -418,8 +446,8 @@ function showFreeCapture(bgDataUrl) {
 
 window.toggleDance = function() {
   dancing = !dancing; t = 0
-  if (vmdReady) playClip(dancing ? (danceClip || walkClip) : walkClip)
-  document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
+  if (vmdReady) playClip(dancing ? (danceClip || idleClip || walkClip) : (walkClip || idleClip))
+  document.getElementById('btn-dance').textContent = dancing ? '🚶' : '🪑'
 }
 
 window.switchMode = function() { ipc.send('switch-mode', 'galgame') }

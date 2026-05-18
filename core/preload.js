@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('electron', {
     on: (ch, fn) => ipcRenderer.on(ch, fn)
   },
   readConfig: () => JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8')),
+  projectDir: path.join(__dirname, '..'),
   modelsDir: path.join(__dirname, '../models/'),
+  motionsDir: path.join(__dirname, '../motions/'),
   setIgnoreMouse: (ignore) => ipcRenderer.send('pet-set-ignore', ignore)
 })
