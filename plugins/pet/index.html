@@ -114,14 +114,16 @@ scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 const dir = new THREE.DirectionalLight(0xffffff, 0.8)
 dir.position.set(5, 10, 5); scene.add(dir)
 
-// ── 诊断立方体（红色），固定贴屏幕底部中央，用于判断渲染管线是否正常 ──
+// ── 诊断立方体（紫色），屏幕正中央巨大，用于判断渲染管线 ──
 const _debugCube = new THREE.Mesh(
-  new THREE.BoxGeometry(80, 80, 80),
-  new THREE.MeshBasicMaterial({ color: 0xff3366 })
+  new THREE.BoxGeometry(300, 300, 300),
+  new THREE.MeshBasicMaterial({ color: 0xff00ff })
 )
-_debugCube.position.set(0, 60, 0)
+_debugCube.position.set(0, window.innerHeight / 2, 0)
 scene.add(_debugCube)
-console.log('[DEBUG] cube added at (0, 60, 0); window =', window.innerWidth, 'x', window.innerHeight)
+console.log('[DEBUG] cube at center; canvas size =', renderer.domElement.width, 'x', renderer.domElement.height,
+            '; window =', window.innerWidth, 'x', window.innerHeight,
+            '; camera =', camera ? 'OK' : 'NULL')
 
 let mesh = null, skeleton = null
 let dancing = false, walkDir = 1, t = 0
@@ -233,16 +235,26 @@ function updateWalkPosition(delta) {
 }
 
 const clock = new THREE.Clock()
+let _frameCount = 0
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
-  if (skeleton) {
-    if (dancing) applyDance(delta)
-    else { applyWalk(delta); updateWalkPosition(delta) }
-  } else if (mesh) {
-    applyIdle(delta)
+  try {
+    if (skeleton) {
+      if (dancing) applyDance(delta)
+      else { applyWalk(delta); updateWalkPosition(delta) }
+    } else if (mesh) {
+      applyIdle(delta)
+    }
+    if (camera) renderer.render(scene, camera)
+    _frameCount++
+    if (_frameCount === 1 || _frameCount === 60 || _frameCount === 300) {
+      console.log('[FRAME]', _frameCount, 'mesh=', !!mesh, 'skel=', !!skeleton,
+                  'cam=', !!camera, 'canvas=', renderer.domElement.width + 'x' + renderer.domElement.height)
+    }
+  } catch (err) {
+    console.error('[ANIMATE ERROR]', err)
   }
-  renderer.render(scene, camera)
 }
 animate()
 
