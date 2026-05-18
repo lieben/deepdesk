@@ -3,6 +3,9 @@ const { app, BrowserWindow, ipcMain, screen, desktopCapturer, dialog } = require
 const path = require('path')
 const fs = require('fs')
 
+// Linux/XRDP 环境下 Electron 的 chrome-sandbox 常无 root 4755 权限；桌宠本身已禁用 renderer sandbox。
+app.commandLine.appendSwitch('no-sandbox')
+
 let petWin = null, galgameWin = null
 let currentMode = 'pet'
 
@@ -39,8 +42,17 @@ function createPetWindow() {
   ipcMain.on('pet-set-ignore', (e, ignore) => {
     if (petWin) petWin.setIgnoreMouseEvents(ignore, { forward: true })
   })
+  petWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[pet:${level}] ${message} (${sourceId}:${line})`)
+  })
+  petWin.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('[pet:did-fail-load]', errorCode, errorDescription, validatedURL)
+  })
+  petWin.webContents.on('render-process-gone', (event, details) => {
+    console.error('[pet:render-gone]', details)
+  })
   petWin.loadFile(path.join(__dirname, '../plugins/pet/index.html'))
-  petWin.webContents.openDevTools({ mode: 'detach' })
+  if (process.env.DEEPDESK_DEVTOOLS === '1') petWin.webContents.openDevTools({ mode: 'detach' })
   petWin.on('closed', () => { petWin = null })
 }
 

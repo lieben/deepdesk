@@ -4,7 +4,7 @@
   "description": "Desktop AI companion with MMD model",
   "main": "core/main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "electron --no-sandbox .",
     "pack": "electron-builder --win portable"
   },
   "dependencies": {

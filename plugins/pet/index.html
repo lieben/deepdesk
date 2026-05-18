@@ -2,67 +2,59 @@
 <html>
 <head>
 <meta charset="utf-8">
+<title>DeepDesk Pet</title>
 <style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
-#c { display: block; width: 100vw; height: 100vh; pointer-events: none;
-     filter: saturate(1.5) contrast(1.4); }
-#bubble, #toolbar, #toolbar button { pointer-events: auto; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; overflow:hidden; background:transparent; user-select:none; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+#c { position:fixed; inset:0; width:100vw; height:100vh; display:block; pointer-events:none; filter:saturate(1.18) contrast(1.06); }
+#hud, #bubble, #hitbox { pointer-events:auto; }
+#hitbox { position:fixed; left:50%; bottom:0; width:180px; height:320px; transform:translateX(-50%); cursor:grab; border-radius:48% 48% 16px 16px; }
+#hitbox.dragging { cursor:grabbing; }
 #bubble {
-  position: fixed; bottom: 38vh; right: 30px;
-  max-width: 280px; display: none;
-  background: rgba(255,255,255,0.95); border-radius: 18px;
-  padding: 10px 14px; font-size: 13px; line-height: 1.5;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  color: #333; word-break: break-all;
+  position:fixed; display:none; max-width:280px; padding:10px 13px; border-radius:16px;
+  background:rgba(255,255,255,.94); color:#2d3240; font-size:13px; line-height:1.45;
+  box-shadow:0 8px 26px rgba(30,40,80,.18); backdrop-filter:blur(8px); word-break:break-word;
 }
-#bubble::after {
-  content: ''; position: absolute; bottom: -8px; right: 24px;
-  border: 8px solid transparent; border-top-color: rgba(255,255,255,0.95);
-  border-bottom: 0;
+#bubble:after { content:""; position:absolute; bottom:-8px; left:38px; border:8px solid transparent; border-top-color:rgba(255,255,255,.94); border-bottom:0; }
+#hud {
+  position:fixed; right:10px; bottom:10px; display:flex; align-items:center; gap:6px;
+  padding:6px; border-radius:14px; background:rgba(255,255,255,.72); box-shadow:0 8px 24px rgba(30,40,80,.14); backdrop-filter:blur(10px);
 }
-#toolbar {
-  position: fixed; bottom: 5px; right: 5px;
-  display: flex; gap: 4px;
+#hud button, #hud select {
+  height:28px; border:0; border-radius:10px; background:rgba(255,255,255,.92); color:#30384f;
+  padding:0 9px; font-size:12px; cursor:pointer; box-shadow:inset 0 0 0 1px rgba(90,100,150,.12);
 }
-#toolbar button {
-  background: rgba(255,255,255,0.85); border: none; border-radius: 8px;
-  padding: 4px 7px; font-size: 11px; cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+#hud button:hover, #hud select:hover { background:#eef1ff; }
+#status {
+  position:fixed; left:10px; bottom:10px; max-width:45vw; padding:6px 10px; border-radius:10px;
+  color:#4b5672; background:rgba(255,255,255,.62); font-size:11px; backdrop-filter:blur(8px); pointer-events:none;
 }
-#toolbar button:hover { background: rgba(220,220,255,0.95); }
-#chat-input { display: none !important; }
-#chat-input input {
-  flex: 1; border-radius: 12px; border: 1.5px solid #ccc;
-  padding: 5px 10px; font-size: 12px; outline: none;
-}
-#chat-input button {
-  border-radius: 10px; border: none; background: #7b8cde;
-  color: #fff; padding: 5px 10px; cursor: pointer; font-size: 12px;
-}
+#chat { position:fixed; right:10px; bottom:54px; display:none; gap:6px; width:310px; padding:8px; border-radius:14px; background:rgba(255,255,255,.78); box-shadow:0 8px 24px rgba(30,40,80,.14); backdrop-filter:blur(10px); pointer-events:auto; }
+#chat input { flex:1; min-width:0; height:30px; border:0; border-radius:10px; padding:0 10px; outline:none; background:rgba(255,255,255,.95); }
+#chat button { width:54px; border:0; border-radius:10px; background:#7f8cf4; color:white; cursor:pointer; }
 </style>
 </head>
 <body>
-<canvas id="c" width="300" height="400"></canvas>
+<canvas id="c"></canvas>
+<div id="hitbox" title="拖动我；双击切换 Galgame"></div>
 <div id="bubble"></div>
-<div id="toolbar">
-  <button onclick="capture('fullscreen')">📷</button>
-  <button onclick="capture('free')">✂️</button>
-  <button title="双击小精灵也可以进入聊天" onclick="switchMode()">🎮</button>
-  <button id="btn-dance" onclick="toggleDance()">🎵</button>
+<div id="status">DeepDesk: booting…</div>
+<div id="chat"><input id="msg" placeholder="和桌宠说话…" onkeydown="if(event.key==='Enter')sendMsg()"><button onclick="sendMsg()">发送</button></div>
+<div id="hud">
+  <select id="motion" title="动作">
+    <option value="idle">待机</option>
+    <option value="walk">散步</option>
+    <option value="flip">前翻</option>
+    <option value="dance">跳舞</option>
+  </select>
+  <button onclick="toggleChat()" title="聊天">💬</button>
+  <button onclick="capture('fullscreen')" title="全屏截图">📷</button>
+  <button onclick="capture('free')" title="区域截图">✂️</button>
+  <button onclick="switchMode()" title="切换Galgame">🎮</button>
+  <button onclick="closeApp()" title="退出">×</button>
 </div>
-<div id="chat-input">
-  <input id="msg" placeholder="和我说话..." onkeydown="if(event.key==='Enter')sendMsg()">
-  <button onclick="sendMsg()">发送</button>
-</div>
-
 <script type="importmap">
-{
-  "imports": {
-    "three": "../../node_modules/three/build/three.module.js",
-    "three/addons/": "../../node_modules/three/examples/jsm/"
-  }
-}
+{"imports":{"three":"../../node_modules/three/build/three.module.js","three/addons/":"../../node_modules/three/examples/jsm/"}}
 </script>
 <script type="module">
 import * as THREE from 'three'
@@ -71,362 +63,181 @@ import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js
 
 const { ipc, readConfig, modelsDir, setIgnoreMouse } = window.electron
 const cfg = readConfig()
+const $ = id => document.getElementById(id)
+const statusEl = $('status'), hitbox = $('hitbox'), bubble = $('bubble'), motionSel = $('motion')
+const log = (...a) => { console.log('[DeepDeskPet]', ...a); statusEl.textContent = 'DeepDesk: ' + a.join(' ') }
+const say = (text, ms=4500) => { bubble.textContent = text; bubble.style.display='block'; clearTimeout(bubble._t); bubble._t=setTimeout(()=>bubble.style.display='none',ms); positionBubble() }
 
-// ── 鼠标穿透动态切换 ──
-// 默认穿透，不挡桌面；鼠标移动到“小精灵身体附近”或工具栏时才接管，支持双击进入 Gal。
-let pointerOnPet = false
-let pointerOnUi = false
-function syncMousePassthrough() { setIgnoreMouse(!(pointerOnPet || pointerOnUi)) }
-;['bubble', 'toolbar'].forEach(id => {
-  const el = document.getElementById(id)
-  if (!el) return
-  el.addEventListener('mouseenter', () => { pointerOnUi = true; syncMousePassthrough() })
-  el.addEventListener('mouseleave', () => { pointerOnUi = false; syncMousePassthrough() })
-})
-function isPointOnPet(clientX, clientY) {
-  if (!mesh) return false
-  const cx = window.innerWidth / 2 + mesh.position.x
-  const bottom = window.innerHeight - 6
-  const w = modelWidthPx * 1.25
-  const h = modelHeightPx * 1.15
-  return clientX >= cx - w/2 && clientX <= cx + w/2 && clientY >= bottom - h && clientY <= bottom + 10
-}
-document.addEventListener('mousemove', e => {
-  const on = isPointOnPet(e.clientX, e.clientY)
-  if (on !== pointerOnPet) { pointerOnPet = on; syncMousePassthrough() }
-})
-document.addEventListener('dblclick', e => {
-  if (isPointOnPet(e.clientX, e.clientY)) switchMode()
+let pointerUi = false, pointerPet = false
+function syncMouse() { setIgnoreMouse(!(pointerUi || pointerPet)) }
+;['hud','chat','bubble','hitbox'].forEach(id => {
+  const el=$(id); el.addEventListener('mouseenter',()=>{ id==='hitbox'?pointerPet=true:pointerUi=true; syncMouse() })
+  el.addEventListener('mouseleave',()=>{ id==='hitbox'?pointerPet=false:pointerUi=false; syncMouse() })
 })
 setIgnoreMouse(true)
 
-// ── 场景 ──
-const canvas = document.getElementById('c')
-const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
-renderer.setPixelRatio(window.devicePixelRatio)
+const canvas = $('c')
+const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true, powerPreference:'low-power' })
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
 renderer.setClearColor(0x000000, 0)
-// SRGB输出 + 关闭ToneMapping，避免色彩被压暗
 if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace
 else renderer.outputEncoding = THREE.sRGBEncoding
 renderer.toneMapping = THREE.NoToneMapping
 const scene = new THREE.Scene()
-// 正交相机：1单位=1像素，模型脚底贴底边
+scene.add(new THREE.AmbientLight(0xffffff, .42))
+const key = new THREE.DirectionalLight(0xffffff, .72); key.position.set(3,8,7); scene.add(key)
+const fill = new THREE.DirectionalLight(0xbfd0ff, .25); fill.position.set(-5,4,3); scene.add(fill)
 let camera
-function buildCamera() {
-  const w = window.innerWidth, h = window.innerHeight
-  // 正交相机：top/bottom 相对相机自身坐标，故相机放原点+看 -Z，
-  // 可见 Y 范围 = 0~h，世界 y=0=屏幕底, y=h=屏幕顶
-  camera = new THREE.OrthographicCamera(-w/2, w/2, h, 0, -1000, 1000)
-  camera.position.set(0, 0, 100)
-  camera.lookAt(0, 0, 0)
-}
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight
-  renderer.setSize(w, h, false)
-  if (camera) {
-    camera.left = -w/2; camera.right = w/2; camera.top = h; camera.bottom = 0
-    camera.updateProjectionMatrix()
-  }
+  const w=innerWidth, h=innerHeight
+  renderer.setSize(w,h,false)
+  camera = new THREE.OrthographicCamera(-w/2,w/2,h,0,-1000,1000)
+  camera.position.set(0,0,100); camera.lookAt(0,0,0); camera.updateProjectionMatrix()
+  updateHitbox(); positionBubble()
 }
-buildCamera(); resize()
 window.addEventListener('resize', resize)
-// 减光防过曝：MMD材质Ambient反射会被环境光打亮黑色,需压低
-scene.add(new THREE.AmbientLight(0xffffff, 0.3))
-const dir = new THREE.DirectionalLight(0xffffff, 0.7)
-dir.position.set(5, 10, 5); scene.add(dir)
 
-let mesh = null, skeleton = null
-let dancing = false, walkDir = 1, t = 0
-let helper = null
-let walkClip = null, idleClip = null, danceClip = null, currentClip = null
-let vmdReady = false
 const loader = new MMDLoader()
+let mesh=null, helper=null, clips={}, currentMotion='idle', clock=new THREE.Clock()
+let pet = { x:Number(localStorage.petX || NaN), y:Number(localStorage.petY || NaN), height: innerHeight*(cfg.pet?.scale || .30), width: 180, facing:1, mode:'idle', walking:false }
+if (!Number.isFinite(pet.x)) pet.x = innerWidth/2
+if (!Number.isFinite(pet.y)) pet.y = innerHeight - 8
+resize()
+const modelUrl = new URL('../../models/' + cfg.activeModel, location.href).href
 const VMD = {
-  walk: new URL('./vmds/2.歩き10L_(40f_前移動20).vmd', import.meta.url).href,
   idle: new URL('./vmds/ぼんやり待ち合わせ_腕広いver(465f).vmd', import.meta.url).href,
-  dance: new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href,
+  walk: new URL('./vmds/2.歩き10L_(40f_前移動20).vmd', import.meta.url).href,
+  flip: new URL('./vmds/2.前宙L_(27f_前移動40).vmd', import.meta.url).href,
+  dance: new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href
 }
 
-function playClip(next) {
-  if (!mesh || !helper || !next || next === currentClip) return
-  // MMDAnimationHelper 是 three.js 官方 MMD 播放链路：AnimationMixer + IK + grant。
-  // 切动作时重新挂载 mesh，避免直接 Mixer 播 VMD 时 IK/付与没有按 MMD 顺序更新。
-  try { helper.remove(mesh) } catch (e) {}
-  helper.add(mesh, { animation: next, physics: false, ik: true, grant: true })
-  currentClip = next
-  window.__mmdHelper = helper
-  window.__currentClip = currentClip
-  console.warn('[VMD] playing via MMDAnimationHelper:', next.name || 'clip', 'duration=', next.duration.toFixed(2))
+function updateHitbox() {
+  hitbox.style.width = Math.max(90, pet.width*1.1) + 'px'
+  hitbox.style.height = Math.max(150, pet.height*1.08) + 'px'
+  hitbox.style.left = pet.x + 'px'
+  hitbox.style.bottom = Math.max(0, innerHeight - pet.y - 4) + 'px'
 }
-
-function loadVMDClip(name, url) {
-  return new Promise(resolve => {
-    loader.loadAnimation(url, mesh, clip => {
-      clip.name = name
-      console.warn('[VMD] loaded', name, 'duration=', clip.duration.toFixed(2), 'tracks=', clip.tracks.length)
-      resolve(clip)
-    }, undefined, err => {
-      console.error('[VMD] load failed', name, url, err)
-      resolve(null)
-    })
-  })
+function positionBubble() {
+  bubble.style.left = Math.min(innerWidth-300, Math.max(8, pet.x - 55)) + 'px'
+  bubble.style.bottom = Math.min(innerHeight-80, Math.max(20, innerHeight - pet.y + pet.height*.82)) + 'px'
 }
-
-async function setupVMDAnimations() {
+function placeMesh() {
   if (!mesh) return
-  helper = new MMDAnimationHelper({ afterglow: 0.0 })
-  ;[walkClip, idleClip, danceClip] = await Promise.all([
-    loadVMDClip('walk', VMD.walk),
-    loadVMDClip('idle', VMD.idle),
-    loadVMDClip('dance', VMD.dance),
-  ])
-  vmdReady = !!walkClip
-  playClip(walkClip || idleClip)
-  window.__mmdHelper = helper
-  window.__clips = { walkClip, idleClip, danceClip }
-  console.warn('[VMD] ready via MMDAnimationHelper=', vmdReady, 'clips=', window.__clips)
+  const box = new THREE.Box3().setFromObject(mesh)
+  mesh.position.x += (pet.x - innerWidth/2) - ((box.min.x + box.max.x)/2)
+  mesh.position.y += (innerHeight - pet.y) - box.min.y
+  mesh.rotation.y += (pet.facing * Math.PI/2 - mesh.rotation.y) * .18
 }
 
-const BONES = {
-  root:       ['センター', 'center', 'Center'],
-  spine:      ['上半身', 'spine', 'Spine'],
-  neck:       ['首', 'neck', 'Neck'],
-  head:       ['頭', 'head', 'Head'],
-  leftArm:    ['左腕', 'left arm', 'LeftArm'],
-  rightArm:   ['右腕', 'right arm', 'RightArm'],
-  leftElbow:  ['左ひじ', 'left elbow', 'LeftElbow'],
-  rightElbow: ['右ひじ', 'right elbow', 'RightElbow'],
-  leftAnkle:  ['左足首D', '左足首', 'left ankle', 'LeftAnkle'],
-  rightAnkle: ['右足首D', '右足首', 'right ankle', 'RightAnkle'],
-  // 带IK的PMX优先用D骨骼（蒙皮真实归宿），无D则回落普通骨骼
-  leftLeg:    ['左足D', '左足', 'left leg', 'LeftLeg'],
-  rightLeg:   ['右足D', '右足', 'right leg', 'RightLeg'],
-  leftKnee:   ['左ひざD', '左ひざ', 'left knee', 'LeftKnee'],
-  rightKnee:  ['右ひざD', '右ひざ', 'right knee', 'RightKnee'],
-}
-
-function findBone(names) {
-  if (!skeleton) return null
-  for (const name of names) {
-    const b = skeleton.bones.find(b => b.name === name || b.name.toLowerCase() === name.toLowerCase())
-    if (b) return b
-  }
-  return null
-}
-
-let _bonesLogged = false
-function applyWalk(dt) {
-  t += dt * 2.0
-  const s = Math.sin(t)
-  const ll = findBone(BONES.leftLeg), rl = findBone(BONES.rightLeg)
-  const lk = findBone(BONES.leftKnee), rk = findBone(BONES.rightKnee)
-  const la_ = findBone(BONES.leftArm), ra_ = findBone(BONES.rightArm)
-  const le = findBone(BONES.leftElbow), re = findBone(BONES.rightElbow)
-  const lan = findBone(BONES.leftAnkle), ran = findBone(BONES.rightAnkle)
-  const sp = findBone(BONES.spine)
-  if (!_bonesLogged) {
-    _bonesLogged = true
-    console.warn('[BONES_FOUND]', {leg:!!ll&&!!rl, knee:!!lk&&!!rk, arm:!!la_&&!!ra_,
-      elbow_l:!!le, elbow_r:!!re, ankle:!!lan&&!!ran, spine:!!sp})
-  }
-  // 大腿前后小幅摆
-  if (ll) ll.rotation.x =  s * 0.22
-  if (rl) rl.rotation.x = -s * 0.22
-  // 膝盖：抬腿中段最弯,前伸最远时打直(避免前腿僵硬)
-  // 左腿s>0时为摆动相,弯曲量 s*(1-s) 在s=0.5取得峰值0.25
-  if (lk) lk.rotation.x = Math.max(0,  s) * (1 - s) * 0.9
-  if (rk) rk.rotation.x = Math.max(0, -s) * (1 + s) * 0.9
-  // 大臂前后小幅摆,反相协调
-  if (la_) la_.rotation.x = -s * 0.22
-  if (ra_) ra_.rotation.x =  s * 0.22
-  // 肘部：MMD肘弯曲绕局部Z轴,默认弯一点+随步伐变化
-  if (le) le.rotation.z =  0.35 + Math.max(0, -s) * 0.3
-  if (re) re.rotation.z = -0.35 - Math.max(0,  s) * 0.3
-  // 脚踝：摆动腿勾脚,支撑腿蹬地
-  if (lan) lan.rotation.x = -s * 0.2
-  if (ran) ran.rotation.x =  s * 0.2
-  // 躯干微微左右摇
-  if (sp) sp.rotation.z =  s * 0.025
-}
-
-function applyIdle(dt) {
-  t += dt * 1.2
-  const s = Math.sin(t)
-  const sp = findBone(BONES.spine), hd = findBone(BONES.head)
-  if (sp) sp.rotation.z = s * 0.015
-  if (hd) hd.rotation.z = s * 0.01
-}
-
-function applyDance(dt) {
-  t += dt * 4
-  const s = Math.sin(t), c = Math.cos(t), s2 = Math.sin(t * 2)
-  const sp = findBone(BONES.spine)
-  const la = findBone(BONES.leftArm), ra = findBone(BONES.rightArm)
-  const le = findBone(BONES.leftElbow), re = findBone(BONES.rightElbow)
-  const ll = findBone(BONES.leftLeg), rl = findBone(BONES.rightLeg)
-  const hd = findBone(BONES.head)
-  if (sp) { sp.rotation.z = s * 0.12; sp.rotation.x = c * 0.05 }
-  if (la) la.rotation.z =  0.8 + s * 0.4
-  if (ra) ra.rotation.z = -0.8 - s * 0.4
-  if (le) le.rotation.z =  s2 * 0.3
-  if (re) re.rotation.z = -s2 * 0.3
-  if (ll) ll.rotation.x =  s * 0.25
-  if (rl) rl.rotation.x = -s * 0.25
-  if (hd) hd.rotation.z =  s * 0.08
-}
-
-// ── 加载模型 ──
-let modelHeightPx = 300   // 模型在屏幕上实际像素高
-let modelWidthPx = 120
-let walkBoundLeft = 0, walkBoundRight = 0
-const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
-loader.load(modelUrl, m => {
-  mesh = m; skeleton = m.skeleton; scene.add(mesh)
-  // 暴露到window便于Console调试
-  window.__mesh = mesh; window.__skeleton = skeleton; window.__THREE = THREE
-  // 修正贴图色彩空间，PMX贴图通常未标记sRGB
+function fixMaterials(m) {
   const csKey = 'colorSpace' in new THREE.Texture() ? 'colorSpace' : 'encoding'
   const csVal = csKey === 'colorSpace' ? THREE.SRGBColorSpace : THREE.sRGBEncoding
   const mats = Array.isArray(m.material) ? m.material : [m.material]
-  let texCount = 0
-  mats.forEach(mat => {
-    if (mat && mat.map) { mat.map[csKey] = csVal; texCount++ }
-    if (mat && mat.emissiveMap) mat.emissiveMap[csKey] = csVal
-    if (mat) mat.needsUpdate = true
-  })
-  console.warn('[BONES] count=', skeleton.bones.length)
-  console.warn('[MAT] count=', mats.length, 'textures fixed=', texCount,
-               'renderer.outputColorSpace=', renderer.outputColorSpace,
-               'renderer.toneMapping=', renderer.toneMapping)
-  // 自动缩放：测原始高度→缩到屏高的 22%
-  const box = new THREE.Box3().setFromObject(mesh)
-  const rawH = box.max.y - box.min.y || 20
-  const targetPx = window.innerHeight * 0.22
-  const scale = targetPx / rawH
-  mesh.scale.setScalar(scale)
-  modelHeightPx = targetPx
-  // 重新算包围盒，把脚底放到 y=0 (屏幕底)
-  const box2 = new THREE.Box3().setFromObject(mesh)
-  mesh.position.y = -box2.min.y
-  // 走路范围：左右各留半个模型宽
-  const halfW = (box2.max.x - box2.min.x) / 2
-  modelWidthPx = Math.max(80, halfW * 2)
-  walkBoundLeft  = -window.innerWidth/2 + halfW + 20
-  walkBoundRight =  window.innerWidth/2 - halfW - 20
-  mesh.position.x = walkBoundLeft
-  mesh.position.y = -box2.min.y    // 脚底贴 y=0 (屏幕底)
-  console.log('Model loaded:', cfg.activeModel, 'scale=', scale.toFixed(3),
-              'targetPx=', targetPx, 'pos=', mesh.position.toArray().map(v => v.toFixed(1)))
-  setupVMDAnimations()
-}, xhr => {
-  console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
-}, e => {
-  console.error('Model load failed:', e)
-})
-
-let targetRotY = Math.PI / 2  // 目标朝向（开始朝右走 = +90°）
-function updateWalkPosition(delta) {
-  if (!mesh || dancing) return
-  // 走路速度：每秒 80 像素；侧身横版走，朝向用 ±90°，转身平滑插值
-  mesh.position.x += walkDir * delta * 80
-  if (mesh.position.x > walkBoundRight) { walkDir = -1; targetRotY = -Math.PI / 2 }
-  if (mesh.position.x < walkBoundLeft)  { walkDir =  1; targetRotY =  Math.PI / 2 }
-  // 平滑过渡：每帧向目标朝向靠近（约 0.4s 完成转身）
-  const diff = targetRotY - mesh.rotation.y
-  mesh.rotation.y += diff * Math.min(1, delta * 6)
+  let tex=0
+  for (const mat of mats) {
+    if (!mat) continue
+    for (const k of ['map','emissiveMap','toonMap','matcap']) if (mat[k]) { mat[k][csKey]=csVal; tex++ }
+    mat.needsUpdate = true
+  }
+  return { mats:mats.length, tex }
 }
+async function loadClip(name,url) {
+  return new Promise(resolve => loader.loadAnimation(url, mesh, clip => { clip.name=name; log('motion',name,'ok',clip.duration.toFixed(2)+'s'); resolve(clip) }, undefined, e => { console.error(e); log('motion',name,'failed'); resolve(null) }))
+}
+function play(name) {
+  currentMotion = name; motionSel.value = name
+  const clip = clips[name] || clips.idle || clips.walk
+  if (!mesh || !helper || !clip) return
+  try { helper.remove(mesh) } catch {}
+  helper.add(mesh, { animation:clip, physics:false, ik:true, grant:true })
+  pet.walking = name === 'walk'
+  say({idle:'我在这里。',walk:'出去走走。',flip:'看好了。',dance:'这支舞……只跳一小段。'}[name] || name, 1800)
+}
+async function boot() {
+  log('loading model', cfg.activeModel)
+  loader.load(modelUrl, async m => {
+    mesh=m; scene.add(mesh); window.__mesh=mesh; window.__THREE=THREE
+    const matInfo = fixMaterials(mesh)
+    const box = new THREE.Box3().setFromObject(mesh)
+    const rawH = Math.max(.001, box.max.y-box.min.y)
+    const scale = pet.height / rawH
+    mesh.scale.setScalar(scale)
+    const box2 = new THREE.Box3().setFromObject(mesh)
+    pet.height = box2.max.y-box2.min.y
+    pet.width = Math.max(80, box2.max.x-box2.min.x)
+    pet.x = Math.min(innerWidth-pet.width*.35, Math.max(pet.width*.35, pet.x))
+    pet.y = Math.min(innerHeight-4, Math.max(pet.height*.4, pet.y))
+    placeMesh(); updateHitbox(); positionBubble()
+    log('model ok bones', mesh.skeleton?.bones?.length || 0, 'materials', matInfo.mats, 'textures', matInfo.tex)
+    helper = new MMDAnimationHelper({ afterglow:0 })
+    clips = {
+      idle: await loadClip('idle', VMD.idle),
+      walk: await loadClip('walk', VMD.walk),
+      flip: await loadClip('flip', VMD.flip),
+      dance: await loadClip('dance', VMD.dance)
+    }
+    window.__clips=clips; window.__mmdHelper=helper
+    play(cfg.pet?.defaultMotion || 'idle')
+  }, xhr => { if (xhr.total) log('model', Math.round(xhr.loaded/xhr.total*100)+'%') }, e => { console.error(e); log('model load failed'); say('模型加载失败：看控制台日志', 10000) })
+}
+boot()
 
-const clock = new THREE.Clock()
+let drag=null
+hitbox.addEventListener('pointerdown', e => { drag={ dx:e.clientX-pet.x, dy:e.clientY-pet.y }; hitbox.setPointerCapture(e.pointerId); hitbox.classList.add('dragging') })
+hitbox.addEventListener('pointermove', e => {
+  if (!drag) return
+  pet.x = Math.min(innerWidth-20, Math.max(20, e.clientX-drag.dx))
+  pet.y = Math.min(innerHeight-4, Math.max(80, e.clientY-drag.dy))
+  localStorage.petX=pet.x; localStorage.petY=pet.y
+  updateHitbox(); positionBubble(); placeMesh()
+})
+hitbox.addEventListener('pointerup', e => { drag=null; hitbox.classList.remove('dragging'); try{hitbox.releasePointerCapture(e.pointerId)}catch{} })
+hitbox.addEventListener('dblclick', () => switchMode())
+motionSel.addEventListener('change', () => play(motionSel.value))
+
+function autoWalk(dt) {
+  if (!pet.walking || drag) return
+  pet.x += pet.facing * dt * 70
+  if (pet.x > innerWidth - pet.width*.45) { pet.x = innerWidth - pet.width*.45; pet.facing=-1 }
+  if (pet.x < pet.width*.45) { pet.x = pet.width*.45; pet.facing=1 }
+  updateHitbox(); positionBubble()
+}
 function animate() {
   requestAnimationFrame(animate)
-  const delta = clock.getDelta()
-  if (helper) helper.update(delta)
-  if (mesh && !dancing) updateWalkPosition(delta)
-  if (camera) renderer.render(scene, camera)
+  const dt = Math.min(.05, clock.getDelta())
+  if (helper) helper.update(dt)
+  autoWalk(dt); placeMesh()
+  renderer.render(scene,camera)
 }
 animate()
 
-// ── 气泡 ──
-const bubble = document.getElementById('bubble')
-function showBubble(text, ms = 5000) {
-  bubble.textContent = text
-  bubble.style.display = 'block'
-  clearTimeout(bubble._t)
-  bubble._t = setTimeout(() => bubble.style.display = 'none', ms)
-}
-
-// ── 对话 ──
-let history = []
+let history=[]
 window.sendMsg = async function() {
-  const input = document.getElementById('msg')
-  const text = input.value.trim(); if (!text) return
-  input.value = ''
-  showBubble('...', 60000)
-  history.push({ role: 'user', content: text })
+  const input=$('msg'), text=input.value.trim(); if(!text) return
+  input.value=''; say('……', 60000); history.push({role:'user',content:text})
   try {
-    const res = await fetch(`${cfg.agent.base_url}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.agent.api_key}` },
-      body: JSON.stringify({ model: cfg.agent.model, messages: history, stream: false })
-    })
-    const data = await res.json()
-    const reply = data.choices[0].message.content
-    history.push({ role: 'assistant', content: reply })
-    showBubble(reply, 6000)
-    ipc.send('plugin-msg', { type: 'chat-reply', text: reply })
-  } catch(e) { showBubble('连接失败 (⊙_⊙)') }
+    const res = await fetch(`${cfg.agent.base_url}/chat/completions`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${cfg.agent.api_key}`}, body:JSON.stringify({model:cfg.agent.model,messages:history,stream:false}) })
+    const data=await res.json(); const reply=data.choices?.[0]?.message?.content || '我听见了。'
+    history.push({role:'assistant',content:reply}); say(reply,7000); ipc.send('plugin-msg',{type:'chat-reply',text:reply})
+  } catch(e) { console.error(e); say('连接失败。',4000) }
 }
-
-window.toggleChat = function() {
-  const el = document.getElementById('chat-input')
-  el.style.display = el.style.display === 'flex' ? 'none' : 'flex'
-  if (el.style.display === 'flex') document.getElementById('msg').focus()
-}
-
-window.capture = async function(type) {
+window.toggleChat = () => { const el=$('chat'); el.style.display = el.style.display==='flex' ? 'none':'flex'; if(el.style.display==='flex') $('msg').focus() }
+window.capture = async type => {
   const dataUrl = await ipc.invoke('capture', type, {})
   if (!dataUrl) return
-  if (type === 'free') { showFreeCapture(dataUrl); return }
-  const saved = await ipc.invoke('save-image', dataUrl)
-  if (saved) showBubble('截图已保存 ✓')
+  if (type === 'free') return showFreeCapture(dataUrl)
+  const saved = await ipc.invoke('save-image', dataUrl); if(saved) say('截图已保存。')
 }
-
 function showFreeCapture(bgDataUrl) {
-  const overlay = document.createElement('div')
-  overlay.style.cssText = 'position:fixed;inset:0;cursor:crosshair;z-index:9999;'
-  const bg = new Image(); bg.src = bgDataUrl
-  const cvs = document.createElement('canvas')
-  cvs.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;'
-  overlay.appendChild(cvs); document.body.appendChild(overlay)
-  bg.onload = () => {
-    cvs.width = bg.width; cvs.height = bg.height
-    const ctx = cvs.getContext('2d'); ctx.drawImage(bg, 0, 0)
-    let start = null
-    overlay.onmousedown = e => { start = { x: e.clientX, y: e.clientY } }
-    overlay.onmouseup = async e => {
-      if (!start) return
-      const x = Math.min(start.x, e.clientX), y = Math.min(start.y, e.clientY)
-      const w = Math.abs(e.clientX - start.x), h = Math.abs(e.clientY - start.y)
-      const out = document.createElement('canvas'); out.width = w; out.height = h
-      out.getContext('2d').drawImage(cvs, x, y, w, h, 0, 0, w, h)
-      document.body.removeChild(overlay)
-      const saved = await ipc.invoke('save-image', out.toDataURL())
-      if (saved) showBubble('截图已保存 ✓')
-    }
-  }
+  const overlay=document.createElement('div'); overlay.style.cssText='position:fixed;inset:0;cursor:crosshair;z-index:9999;pointer-events:auto;'
+  const bg=new Image(); bg.src=bgDataUrl
+  const cvs=document.createElement('canvas'); cvs.style.cssText='position:absolute;inset:0;width:100%;height:100%;'; overlay.appendChild(cvs); document.body.appendChild(overlay)
+  bg.onload=()=>{ cvs.width=bg.width; cvs.height=bg.height; cvs.getContext('2d').drawImage(bg,0,0); let start=null; overlay.onmousedown=e=>start={x:e.clientX,y:e.clientY}; overlay.onmouseup=async e=>{ if(!start)return; const x=Math.min(start.x,e.clientX),y=Math.min(start.y,e.clientY),w=Math.abs(e.clientX-start.x),h=Math.abs(e.clientY-start.y); const out=document.createElement('canvas'); out.width=w; out.height=h; out.getContext('2d').drawImage(cvs,x,y,w,h,0,0,w,h); overlay.remove(); const saved=await ipc.invoke('save-image',out.toDataURL()); if(saved) say('截图已保存。') } }
 }
-
-window.toggleDance = function() {
-  dancing = !dancing; t = 0
-  if (vmdReady) playClip(dancing ? (danceClip || walkClip) : walkClip)
-  document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
-}
-
-window.switchMode = function() { ipc.send('switch-mode', 'galgame') }
-
-ipc.on('plugin-msg', (e, msg) => {
-  if (msg.type === 'chat-reply') showBubble(msg.text)
-})
+window.switchMode = () => ipc.send('switch-mode','galgame')
+window.closeApp = () => ipc.send('switch-mode','close')
+ipc.on('plugin-msg', (e,msg) => { if(msg.type==='chat-reply') say(msg.text) })
+setTimeout(()=>say('DeepDesk 桌宠启动中。'), 500)
 </script>
 </body>
 </html>

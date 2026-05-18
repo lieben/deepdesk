@@ -1,9 +1,15 @@
 {
-  "activeModel": "沈星回Q版暗蚀国王/沈星回Q版暗蚀国王.pmx",
+  "activeModel": "qq_dark_king/model.pmx",
   "agent": {
     "base_url": "http://192.168.1.126:18089/v1",
     "api_key": "sk-deepdesk",
     "model": "otto"
   },
-  "defaultMode": "pet"
+  "defaultMode": "pet",
+  "pet": {
+    "scale": 0.3,
+    "defaultMotion": "idle",
+    "x": null,
+    "y": null
+  }
 }
