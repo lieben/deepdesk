@@ -1,13 +1,7 @@
 node_modules/
 dist/
+models/
 motions/
 music/
-
-# Keep bundled demo/QQ pet assets required for out-of-box debugging.
-models/*
-!models/qq_dark_king/
-!models/qq_dark_king/**
 *.pmx
-!models/qq_dark_king/model.pmx
 *.vmd
-!plugins/pet/vmds/*.vmd
