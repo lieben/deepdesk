@@ -208,12 +208,16 @@ new MMDLoader().load(modelUrl, m => {
   console.error('Model load failed:', e)
 })
 
+let targetRotY = Math.PI / 2  // 目标朝向（开始朝右走 = +90°）
 function updateWalkPosition(delta) {
   if (!mesh || dancing) return
-  // 走路速度：每秒 80 像素；侧身横版走，朝向用 ±90°
+  // 走路速度：每秒 80 像素；侧身横版走，朝向用 ±90°，转身平滑插值
   mesh.position.x += walkDir * delta * 80
-  if (mesh.position.x > walkBoundRight) { walkDir = -1; mesh.rotation.y = -Math.PI / 2 }
-  if (mesh.position.x < walkBoundLeft)  { walkDir =  1; mesh.rotation.y =  Math.PI / 2 }
+  if (mesh.position.x > walkBoundRight) { walkDir = -1; targetRotY = -Math.PI / 2 }
+  if (mesh.position.x < walkBoundLeft)  { walkDir =  1; targetRotY =  Math.PI / 2 }
+  // 平滑过渡：每帧向目标朝向靠近（约 0.4s 完成转身）
+  const diff = targetRotY - mesh.rotation.y
+  mesh.rotation.y += diff * Math.min(1, delta * 6)
 }
 
 const clock = new THREE.Clock()
