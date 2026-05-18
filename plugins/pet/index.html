@@ -121,6 +121,53 @@ dir.position.set(5, 10, 5); scene.add(dir)
 
 let mesh = null, skeleton = null
 let dancing = false, walkDir = 1, t = 0
+let mixer = null
+let walkAction = null, idleAction = null, danceAction = null, currentAction = null
+let vmdReady = false
+const loader = new MMDLoader()
+const VMD = {
+  walk: new URL('./vmds/2.歩き10L_(40f_前移動20).vmd', import.meta.url).href,
+  idle: new URL('./vmds/ぼんやり待ち合わせ_腕広いver(465f).vmd', import.meta.url).href,
+  dance: new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href,
+}
+
+function playAction(next, fade = 0.25) {
+  if (!next || next === currentAction) return
+  next.enabled = true
+  next.reset().play()
+  if (currentAction) currentAction.crossFadeTo(next, fade, false)
+  currentAction = next
+}
+
+function loadVMDAction(name, url, timeScale = 1) {
+  return new Promise(resolve => {
+    loader.loadAnimation(url, mesh, clip => {
+      const action = mixer.clipAction(clip)
+      action.setLoop(THREE.LoopRepeat, Infinity)
+      action.clampWhenFinished = false
+      action.timeScale = timeScale
+      console.warn('[VMD] loaded', name, 'duration=', clip.duration.toFixed(2), 'tracks=', clip.tracks.length)
+      resolve(action)
+    }, undefined, err => {
+      console.error('[VMD] load failed', name, url, err)
+      resolve(null)
+    })
+  })
+}
+
+async function setupVMDAnimations() {
+  if (!mesh) return
+  mixer = new THREE.AnimationMixer(mesh)
+  ;[walkAction, idleAction, danceAction] = await Promise.all([
+    loadVMDAction('walk', VMD.walk, 0.85),
+    loadVMDAction('idle', VMD.idle, 1.0),
+    loadVMDAction('dance', VMD.dance, 1.0),
+  ])
+  vmdReady = !!walkAction
+  playAction(walkAction || idleAction, 0)
+  window.__mixer = mixer; window.__actions = { walkAction, idleAction, danceAction }
+  console.warn('[VMD] ready=', vmdReady, 'actions=', window.__actions)
+}
 
 const BONES = {
   root:       ['センター', 'center', 'Center'],
@@ -214,7 +261,7 @@ function applyDance(dt) {
 let modelHeightPx = 300   // 模型在屏幕上实际像素高
 let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
-new MMDLoader().load(modelUrl, m => {
+loader.load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
   // 暴露到window便于Console调试
   window.__mesh = mesh; window.__skeleton = skeleton; window.__THREE = THREE
@@ -251,6 +298,7 @@ new MMDLoader().load(modelUrl, m => {
   mesh.position.y = -box2.min.y    // 脚底贴 y=0 (屏幕底)
   console.log('Model loaded:', cfg.activeModel, 'scale=', scale.toFixed(3),
               'targetPx=', targetPx, 'pos=', mesh.position.toArray().map(v => v.toFixed(1)))
+  setupVMDAnimations()
 }, xhr => {
   console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
 }, e => {
@@ -273,10 +321,13 @@ const clock = new THREE.Clock()
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
-  if (skeleton) {
+  if (mixer) mixer.update(delta)
+  if (mesh && !dancing) updateWalkPosition(delta)
+  // VMD未加载成功时回退到手写正弦动画，避免彻底不动
+  if (!vmdReady && skeleton) {
     if (dancing) applyDance(delta)
-    else { applyWalk(delta); updateWalkPosition(delta) }
-  } else if (mesh) {
+    else applyWalk(delta)
+  } else if (!vmdReady && mesh) {
     applyIdle(delta)
   }
   if (camera) renderer.render(scene, camera)
@@ -355,6 +406,7 @@ function showFreeCapture(bgDataUrl) {
 
 window.toggleDance = function() {
   dancing = !dancing; t = 0
+  if (vmdReady) playAction(dancing ? (danceAction || walkAction) : walkAction, 0.3)
   document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
 }
 
