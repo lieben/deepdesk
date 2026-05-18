@@ -88,6 +88,10 @@ const canvas = document.getElementById('c')
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true })
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setClearColor(0x000000, 0)
+// SRGB输出 + 关闭ToneMapping，避免色彩被压暗
+if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace
+else renderer.outputEncoding = THREE.sRGBEncoding
+renderer.toneMapping = THREE.NoToneMapping
 const scene = new THREE.Scene()
 // 正交相机：1单位=1像素，模型脚底贴底边
 let camera
@@ -188,6 +192,17 @@ let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
 new MMDLoader().load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
+  // 修正贴图色彩空间，PMX贴图通常未标记sRGB
+  const csKey = 'colorSpace' in new THREE.Texture() ? 'colorSpace' : 'encoding'
+  const csVal = csKey === 'colorSpace' ? THREE.SRGBColorSpace : THREE.sRGBEncoding
+  const mats = Array.isArray(m.material) ? m.material : [m.material]
+  mats.forEach(mat => {
+    if (mat && mat.map) mat.map[csKey] = csVal
+    if (mat && mat.emissiveMap) mat.emissiveMap[csKey] = csVal
+    if (mat) mat.needsUpdate = true
+  })
+  // 打印骨骼名供诊断走路骨骼是否匹配
+  console.log('[BONES]', skeleton.bones.map(b => b.name).join(' | '))
   // 自动缩放：测原始高度→缩到屏高的 22%
   const box = new THREE.Box3().setFromObject(mesh)
   const rawH = box.max.y - box.min.y || 20
