@@ -5,7 +5,8 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
-#c { display: block; width: 100vw; height: 100vh; pointer-events: none; }
+#c { display: block; width: 100vw; height: 100vh; pointer-events: none;
+     filter: saturate(1.35) contrast(1.05) brightness(1.05); }
 #bubble, #toolbar, #toolbar button, #chat-input, #chat-input input, #chat-input button { pointer-events: auto; }
 #bubble {
   position: fixed; bottom: 38vh; right: 30px;
@@ -113,8 +114,9 @@ function resize() {
 }
 buildCamera(); resize()
 window.addEventListener('resize', resize)
-scene.add(new THREE.AmbientLight(0xffffff, 1.2))
-const dir = new THREE.DirectionalLight(0xffffff, 0.8)
+scene.add(new THREE.AmbientLight(0xffffff, 1.0))
+scene.add(new THREE.HemisphereLight(0xffffff, 0xddddff, 0.6))
+const dir = new THREE.DirectionalLight(0xffffff, 1.2)
 dir.position.set(5, 10, 5); scene.add(dir)
 
 let mesh = null, skeleton = null
@@ -129,10 +131,11 @@ const BONES = {
   rightArm:   ['右腕', 'right arm', 'RightArm'],
   leftElbow:  ['左ひじ', 'left elbow', 'LeftElbow'],
   rightElbow: ['右ひじ', 'right elbow', 'RightElbow'],
-  leftLeg:    ['左足', 'left leg', 'LeftLeg'],
-  rightLeg:   ['右足', 'right leg', 'RightLeg'],
-  leftKnee:   ['左ひざ', 'left knee', 'LeftKnee'],
-  rightKnee:  ['右ひざ', 'right knee', 'RightKnee'],
+  // 带IK的PMX优先用D骨骼（蒙皮真实归宿），无D则回落普通骨骼
+  leftLeg:    ['左足D', '左足', 'left leg', 'LeftLeg'],
+  rightLeg:   ['右足D', '右足', 'right leg', 'RightLeg'],
+  leftKnee:   ['左ひざD', '左ひざ', 'left knee', 'LeftKnee'],
+  rightKnee:  ['右ひざD', '右ひざ', 'right knee', 'RightKnee'],
 }
 
 function findBone(names) {
