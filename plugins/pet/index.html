@@ -5,8 +5,7 @@
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
-#c { display: block; width: 100vw; height: 100vh; pointer-events: none; background: rgba(0,255,0,0.25); }
-#diagnostic-dom { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 200px; height: 200px; background: rgba(255,0,0,0.85); pointer-events: none; z-index: 99; color: #fff; font: bold 14px sans-serif; display: flex; align-items: center; justify-content: center; }
+#c { display: block; width: 100vw; height: 100vh; pointer-events: none; }
 #bubble, #toolbar, #toolbar button, #chat-input, #chat-input input, #chat-input button { pointer-events: auto; }
 #bubble {
   position: fixed; bottom: 38vh; right: 30px;
@@ -46,7 +45,6 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 </style>
 </head>
 <body>
-<div id="diagnostic-dom">DOM-OK</div>
 <canvas id="c" width="300" height="400"></canvas>
 <div id="bubble"></div>
 <div id="toolbar">
@@ -114,17 +112,6 @@ window.addEventListener('resize', resize)
 scene.add(new THREE.AmbientLight(0xffffff, 1.2))
 const dir = new THREE.DirectionalLight(0xffffff, 0.8)
 dir.position.set(5, 10, 5); scene.add(dir)
-
-// ── 诊断立方体（紫色），移到右上角小一点，避免遮挡模型 ──
-const _debugCube = new THREE.Mesh(
-  new THREE.BoxGeometry(60, 60, 60),
-  new THREE.MeshBasicMaterial({ color: 0xff00ff })
-)
-_debugCube.position.set(window.innerWidth/2 - 60, window.innerHeight - 60, 0)
-scene.add(_debugCube)
-console.log('[DEBUG] cube at center; canvas size =', renderer.domElement.width, 'x', renderer.domElement.height,
-            '; window =', window.innerWidth, 'x', window.innerHeight,
-            '; camera =', camera ? 'OK' : 'NULL')
 
 let mesh = null, skeleton = null
 let dancing = false, walkDir = 1, t = 0
@@ -215,15 +202,10 @@ new MMDLoader().load(modelUrl, m => {
   const halfW = (box2.max.x - box2.min.x) / 2
   walkBoundLeft  = -window.innerWidth/2 + halfW + 20
   walkBoundRight =  window.innerWidth/2 - halfW - 20
-  // ── DEBUG: 钉死屏幕中央(脚底贴底), 禁骨骼 ──
-  mesh.position.set(0, 0, 0)
+  mesh.position.x = walkBoundLeft
   mesh.position.y = -box2.min.y    // 脚底贴 y=0 (屏幕底)
-  mesh.rotation.y = 0
-  console.log('[MODEL]', cfg.activeModel, 'scale=', scale.toFixed(3),
-              'rawH=', rawH.toFixed(2), 'targetPx=', targetPx,
-              'box2.min=', box2.min.toArray().map(v => v.toFixed(1)),
-              'box2.max=', box2.max.toArray().map(v => v.toFixed(1)),
-              'pos=', mesh.position.toArray().map(v => v.toFixed(1)))
+  console.log('Model loaded:', cfg.activeModel, 'scale=', scale.toFixed(3),
+              'targetPx=', targetPx, 'pos=', mesh.position.toArray().map(v => v.toFixed(1)))
 }, xhr => {
   console.log('Loading:', Math.round(xhr.loaded/xhr.total*100) + '%')
 }, e => {
@@ -243,27 +225,16 @@ function updateWalkPosition(delta) {
 }
 
 const clock = new THREE.Clock()
-let _frameCount = 0
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
-  try {
-    // ── DEBUG: 暂时禁用骨骼动画和走路，单独测试模型是否可见 ──
-    // if (skeleton) {
-    //   if (dancing) applyDance(delta)
-    //   else { applyWalk(delta); updateWalkPosition(delta) }
-    // } else if (mesh) {
-    //   applyIdle(delta)
-    // }
-    if (camera) renderer.render(scene, camera)
-    _frameCount++
-    if (_frameCount === 1 || _frameCount === 60 || _frameCount === 300) {
-      console.log('[FRAME]', _frameCount, 'mesh=', !!mesh, 'skel=', !!skeleton,
-                  'cam=', !!camera, 'canvas=', renderer.domElement.width + 'x' + renderer.domElement.height)
-    }
-  } catch (err) {
-    console.error('[ANIMATE ERROR]', err)
+  if (skeleton) {
+    if (dancing) applyDance(delta)
+    else { applyWalk(delta); updateWalkPosition(delta) }
+  } else if (mesh) {
+    applyIdle(delta)
   }
+  if (camera) renderer.render(scene, camera)
 }
 animate()
 
