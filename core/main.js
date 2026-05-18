@@ -27,9 +27,10 @@ function createPetWindow() {
 function createGalgameWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   galgameWin = new BrowserWindow({
-    width: 900, height: 600,
-    x: Math.floor((width - 900) / 2), y: Math.floor((height - 600) / 2),
-    transparent: true, frame: false, alwaysOnTop: true,
+    // 手机比例 Galgame 窗口：9:16，居中显示
+    width: 430, height: 760,
+    x: Math.floor((width - 430) / 2), y: Math.floor((height - 760) / 2),
+    transparent: true, frame: false, alwaysOnTop: true, resizable: false,
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   })
   galgameWin.loadFile(path.join(__dirname, '../plugins/galgame/index.html'))

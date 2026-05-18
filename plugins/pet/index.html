@@ -7,7 +7,7 @@
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; user-select: none; }
 #c { display: block; width: 100vw; height: 100vh; pointer-events: none;
      filter: saturate(1.5) contrast(1.4); }
-#bubble, #toolbar, #toolbar button, #chat-input, #chat-input input, #chat-input button { pointer-events: auto; }
+#bubble, #toolbar, #toolbar button { pointer-events: auto; }
 #bubble {
   position: fixed; bottom: 38vh; right: 30px;
   max-width: 280px; display: none;
@@ -31,10 +31,7 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
 }
 #toolbar button:hover { background: rgba(220,220,255,0.95); }
-#chat-input {
-  position: fixed; bottom: 35px; right: 5px; left: 5px;
-  display: none; gap: 4px;
-}
+#chat-input { display: none !important; }
 #chat-input input {
   flex: 1; border-radius: 12px; border: 1.5px solid #ccc;
   padding: 5px 10px; font-size: 12px; outline: none;
@@ -49,10 +46,9 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 <canvas id="c" width="300" height="400"></canvas>
 <div id="bubble"></div>
 <div id="toolbar">
-  <button onclick="toggleChat()">💬</button>
   <button onclick="capture('fullscreen')">📷</button>
   <button onclick="capture('free')">✂️</button>
-  <button onclick="switchMode()">🎮</button>
+  <button title="双击小精灵也可以进入聊天" onclick="switchMode()">🎮</button>
   <button id="btn-dance" onclick="toggleDance()">🎵</button>
 </div>
 <div id="chat-input">
@@ -76,14 +72,33 @@ import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js
 const { ipc, readConfig, modelsDir, setIgnoreMouse } = window.electron
 const cfg = readConfig()
 
-// ── 鼠标穿透动态切换：UI区域hover时关穿透，离开后开穿透 ──
-// 默认整窗穿透（鼠标可点桌面图标），UI hover时临时禁穿透接收点击
-;['bubble', 'toolbar', 'chat-input'].forEach(id => {
+// ── 鼠标穿透动态切换 ──
+// 默认穿透，不挡桌面；鼠标移动到“小精灵身体附近”或工具栏时才接管，支持双击进入 Gal。
+let pointerOnPet = false
+let pointerOnUi = false
+function syncMousePassthrough() { setIgnoreMouse(!(pointerOnPet || pointerOnUi)) }
+;['bubble', 'toolbar'].forEach(id => {
   const el = document.getElementById(id)
   if (!el) return
-  el.addEventListener('mouseenter', () => setIgnoreMouse(false))
-  el.addEventListener('mouseleave', () => setIgnoreMouse(true))
+  el.addEventListener('mouseenter', () => { pointerOnUi = true; syncMousePassthrough() })
+  el.addEventListener('mouseleave', () => { pointerOnUi = false; syncMousePassthrough() })
 })
+function isPointOnPet(clientX, clientY) {
+  if (!mesh) return false
+  const cx = window.innerWidth / 2 + mesh.position.x
+  const bottom = window.innerHeight - 6
+  const w = modelWidthPx * 1.25
+  const h = modelHeightPx * 1.15
+  return clientX >= cx - w/2 && clientX <= cx + w/2 && clientY >= bottom - h && clientY <= bottom + 10
+}
+document.addEventListener('mousemove', e => {
+  const on = isPointOnPet(e.clientX, e.clientY)
+  if (on !== pointerOnPet) { pointerOnPet = on; syncMousePassthrough() }
+})
+document.addEventListener('dblclick', e => {
+  if (isPointOnPet(e.clientX, e.clientY)) switchMode()
+})
+setIgnoreMouse(true)
 
 // ── 场景 ──
 const canvas = document.getElementById('c')
@@ -262,6 +277,7 @@ function applyDance(dt) {
 
 // ── 加载模型 ──
 let modelHeightPx = 300   // 模型在屏幕上实际像素高
+let modelWidthPx = 120
 let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
 loader.load(modelUrl, m => {
@@ -278,8 +294,7 @@ loader.load(modelUrl, m => {
     if (mat && mat.emissiveMap) mat.emissiveMap[csKey] = csVal
     if (mat) mat.needsUpdate = true
   })
-  // 打印骨骼名供诊断走路骨骼是否匹配（warn级别强可见）
-  console.warn('[BONES]', skeleton.bones.map(b => b.name).join(' | '))
+  console.warn('[BONES] count=', skeleton.bones.length)
   console.warn('[MAT] count=', mats.length, 'textures fixed=', texCount,
                'renderer.outputColorSpace=', renderer.outputColorSpace,
                'renderer.toneMapping=', renderer.toneMapping)
@@ -295,6 +310,7 @@ loader.load(modelUrl, m => {
   mesh.position.y = -box2.min.y
   // 走路范围：左右各留半个模型宽
   const halfW = (box2.max.x - box2.min.x) / 2
+  modelWidthPx = Math.max(80, halfW * 2)
   walkBoundLeft  = -window.innerWidth/2 + halfW + 20
   walkBoundRight =  window.innerWidth/2 - halfW - 20
   mesh.position.x = walkBoundLeft
