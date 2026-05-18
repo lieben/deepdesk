@@ -192,17 +192,23 @@ let walkBoundLeft = 0, walkBoundRight = 0
 const modelUrl = 'file:///' + modelsDir.replace(/\\/g, '/') + cfg.activeModel
 new MMDLoader().load(modelUrl, m => {
   mesh = m; skeleton = m.skeleton; scene.add(mesh)
+  // 暴露到window便于Console调试
+  window.__mesh = mesh; window.__skeleton = skeleton; window.__THREE = THREE
   // 修正贴图色彩空间，PMX贴图通常未标记sRGB
   const csKey = 'colorSpace' in new THREE.Texture() ? 'colorSpace' : 'encoding'
   const csVal = csKey === 'colorSpace' ? THREE.SRGBColorSpace : THREE.sRGBEncoding
   const mats = Array.isArray(m.material) ? m.material : [m.material]
+  let texCount = 0
   mats.forEach(mat => {
-    if (mat && mat.map) mat.map[csKey] = csVal
+    if (mat && mat.map) { mat.map[csKey] = csVal; texCount++ }
     if (mat && mat.emissiveMap) mat.emissiveMap[csKey] = csVal
     if (mat) mat.needsUpdate = true
   })
-  // 打印骨骼名供诊断走路骨骼是否匹配
-  console.log('[BONES]', skeleton.bones.map(b => b.name).join(' | '))
+  // 打印骨骼名供诊断走路骨骼是否匹配（warn级别强可见）
+  console.warn('[BONES]', skeleton.bones.map(b => b.name).join(' | '))
+  console.warn('[MAT] count=', mats.length, 'textures fixed=', texCount,
+               'renderer.outputColorSpace=', renderer.outputColorSpace,
+               'renderer.toneMapping=', renderer.toneMapping)
   // 自动缩放：测原始高度→缩到屏高的 22%
   const box = new THREE.Box3().setFromObject(mesh)
   const rawH = box.max.y - box.min.y || 20
