@@ -71,6 +71,7 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 <script type="module">
 import * as THREE from 'three'
 import { MMDLoader } from 'three/addons/loaders/MMDLoader.js'
+import { MMDAnimationHelper } from 'three/addons/animation/MMDAnimationHelper.js'
 
 const { ipc, readConfig, modelsDir, setIgnoreMouse } = window.electron
 const cfg = readConfig()
@@ -121,8 +122,8 @@ dir.position.set(5, 10, 5); scene.add(dir)
 
 let mesh = null, skeleton = null
 let dancing = false, walkDir = 1, t = 0
-let mixer = null
-let walkAction = null, idleAction = null, danceAction = null, currentAction = null
+let helper = null
+let walkClip = null, idleClip = null, danceClip = null, currentClip = null
 let vmdReady = false
 const loader = new MMDLoader()
 const VMD = {
@@ -131,23 +132,24 @@ const VMD = {
   dance: new URL('./vmds/GimmeGimme_with_emotion.vmd', import.meta.url).href,
 }
 
-function playAction(next, fade = 0.25) {
-  if (!next || next === currentAction) return
-  next.enabled = true
-  next.reset().play()
-  if (currentAction) currentAction.crossFadeTo(next, fade, false)
-  currentAction = next
+function playClip(next) {
+  if (!mesh || !helper || !next || next === currentClip) return
+  // MMDAnimationHelper 是 three.js 官方 MMD 播放链路：AnimationMixer + IK + grant。
+  // 切动作时重新挂载 mesh，避免直接 Mixer 播 VMD 时 IK/付与没有按 MMD 顺序更新。
+  try { helper.remove(mesh) } catch (e) {}
+  helper.add(mesh, { animation: next, physics: false, ik: true, grant: true })
+  currentClip = next
+  window.__mmdHelper = helper
+  window.__currentClip = currentClip
+  console.warn('[VMD] playing via MMDAnimationHelper:', next.name || 'clip', 'duration=', next.duration.toFixed(2))
 }
 
-function loadVMDAction(name, url, timeScale = 1) {
+function loadVMDClip(name, url) {
   return new Promise(resolve => {
     loader.loadAnimation(url, mesh, clip => {
-      const action = mixer.clipAction(clip)
-      action.setLoop(THREE.LoopRepeat, Infinity)
-      action.clampWhenFinished = false
-      action.timeScale = timeScale
+      clip.name = name
       console.warn('[VMD] loaded', name, 'duration=', clip.duration.toFixed(2), 'tracks=', clip.tracks.length)
-      resolve(action)
+      resolve(clip)
     }, undefined, err => {
       console.error('[VMD] load failed', name, url, err)
       resolve(null)
@@ -157,16 +159,17 @@ function loadVMDAction(name, url, timeScale = 1) {
 
 async function setupVMDAnimations() {
   if (!mesh) return
-  mixer = new THREE.AnimationMixer(mesh)
-  ;[walkAction, idleAction, danceAction] = await Promise.all([
-    loadVMDAction('walk', VMD.walk, 0.85),
-    loadVMDAction('idle', VMD.idle, 1.0),
-    loadVMDAction('dance', VMD.dance, 1.0),
+  helper = new MMDAnimationHelper({ afterglow: 0.0 })
+  ;[walkClip, idleClip, danceClip] = await Promise.all([
+    loadVMDClip('walk', VMD.walk),
+    loadVMDClip('idle', VMD.idle),
+    loadVMDClip('dance', VMD.dance),
   ])
-  vmdReady = !!walkAction
-  playAction(walkAction || idleAction, 0)
-  window.__mixer = mixer; window.__actions = { walkAction, idleAction, danceAction }
-  console.warn('[VMD] ready=', vmdReady, 'actions=', window.__actions)
+  vmdReady = !!walkClip
+  playClip(walkClip || idleClip)
+  window.__mmdHelper = helper
+  window.__clips = { walkClip, idleClip, danceClip }
+  console.warn('[VMD] ready via MMDAnimationHelper=', vmdReady, 'clips=', window.__clips)
 }
 
 const BONES = {
@@ -321,7 +324,7 @@ const clock = new THREE.Clock()
 function animate() {
   requestAnimationFrame(animate)
   const delta = clock.getDelta()
-  if (mixer) mixer.update(delta)
+  if (helper) helper.update(delta)
   if (mesh && !dancing) updateWalkPosition(delta)
   if (camera) renderer.render(scene, camera)
 }
@@ -399,7 +402,7 @@ function showFreeCapture(bgDataUrl) {
 
 window.toggleDance = function() {
   dancing = !dancing; t = 0
-  if (vmdReady) playAction(dancing ? (danceAction || walkAction) : walkAction, 0.3)
+  if (vmdReady) playClip(dancing ? (danceClip || walkClip) : walkClip)
   document.getElementById('btn-dance').textContent = dancing ? '⏹' : '🎵'
 }
 
