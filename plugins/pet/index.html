@@ -139,9 +139,26 @@ function playAction(next, fade = 0.25) {
   currentAction = next
 }
 
-function loadVMDAction(name, url, timeScale = 1) {
+function flattenVerticalCenterMotion(clip) {
+  // 桌宠已经用 mesh.position.y 固定脚底贴屏幕底部；
+  // 走路VMD通常还会给「センター/Center」骨骼写上下位移，
+  // 叠加后就会像坐电梯一样一上一下。这里仅把中心骨 position.y 固定住，
+  // 保留 position.x/z 和所有旋转，腿脚动作不会被抹掉。
+  for (const track of clip.tracks) {
+    const isCenterPos = /^(センター|center|Center)\.position$/.test(track.name)
+    if (!isCenterPos || !track.values || track.values.length < 3) continue
+    const baseY = track.values[1]
+    for (let i = 1; i < track.values.length; i += 3) track.values[i] = baseY
+    console.warn('[VMD] flattened center Y track:', track.name, 'keys=', track.values.length / 3)
+  }
+  clip.resetDuration()
+  return clip
+}
+
+function loadVMDAction(name, url, timeScale = 1, opts = {}) {
   return new Promise(resolve => {
     loader.loadAnimation(url, mesh, clip => {
+      if (opts.flattenY) clip = flattenVerticalCenterMotion(clip)
       const action = mixer.clipAction(clip)
       action.setLoop(THREE.LoopRepeat, Infinity)
       action.clampWhenFinished = false
@@ -159,7 +176,7 @@ async function setupVMDAnimations() {
   if (!mesh) return
   mixer = new THREE.AnimationMixer(mesh)
   ;[walkAction, idleAction, danceAction] = await Promise.all([
-    loadVMDAction('walk', VMD.walk, 0.85),
+    loadVMDAction('walk', VMD.walk, 0.85, { flattenY: true }),
     loadVMDAction('idle', VMD.idle, 1.0),
     loadVMDAction('dance', VMD.dance, 1.0),
   ])
