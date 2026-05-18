@@ -131,6 +131,8 @@ const BONES = {
   rightArm:   ['右腕', 'right arm', 'RightArm'],
   leftElbow:  ['左ひじ', 'left elbow', 'LeftElbow'],
   rightElbow: ['右ひじ', 'right elbow', 'RightElbow'],
+  leftAnkle:  ['左足首D', '左足首', 'left ankle', 'LeftAnkle'],
+  rightAnkle: ['右足首D', '右足首', 'right ankle', 'RightAnkle'],
   // 带IK的PMX优先用D骨骼（蒙皮真实归宿），无D则回落普通骨骼
   leftLeg:    ['左足D', '左足', 'left leg', 'LeftLeg'],
   rightLeg:   ['右足D', '右足', 'right leg', 'RightLeg'],
@@ -148,23 +150,31 @@ function findBone(names) {
 }
 
 function applyWalk(dt) {
-  t += dt * 3
+  t += dt * 2.5
   const s = Math.sin(t)
   const ll = findBone(BONES.leftLeg), rl = findBone(BONES.rightLeg)
   const lk = findBone(BONES.leftKnee), rk = findBone(BONES.rightKnee)
-  const la = findBone(BONES.leftArm), ra = findBone(BONES.rightArm)
+  const la_ = findBone(BONES.leftArm), ra_ = findBone(BONES.rightArm)
+  const le = findBone(BONES.leftElbow), re = findBone(BONES.rightElbow)
+  const lan = findBone(BONES.leftAnkle), ran = findBone(BONES.rightAnkle)
   const sp = findBone(BONES.spine)
-  // 大腿前后摆动
-  if (ll) ll.rotation.x =  s * 0.5
-  if (rl) rl.rotation.x = -s * 0.5
+  // 大腿前后摆动（行走幅度，不是跑步）
+  if (ll) ll.rotation.x =  s * 0.3
+  if (rl) rl.rotation.x = -s * 0.3
   // 膝盖：摆动腿(大腿向前=s同号)弯曲，支撑腿打直
-  if (lk) lk.rotation.x = Math.max(0,  s) * 0.7
-  if (rk) rk.rotation.x = Math.max(0, -s) * 0.7
-  // 手臂前后摆，反相协调
-  if (la) la.rotation.x = -s * 0.5
-  if (ra) ra.rotation.x =  s * 0.5
+  if (lk) lk.rotation.x = Math.max(0,  s) * 0.4
+  if (rk) rk.rotation.x = Math.max(0, -s) * 0.4
+  // 大臂前后摆，反相协调
+  if (la_) la_.rotation.x = -s * 0.3
+  if (ra_) ra_.rotation.x =  s * 0.3
+  // 肘部：自然弯曲（z轴），随步伐略微变化
+  if (le) le.rotation.y = -0.25 - Math.max(0, -s) * 0.25
+  if (re) re.rotation.y =  0.25 + Math.max(0,  s) * 0.25
+  // 脚踝：摆动腿勾脚抬起，支撑腿蹬地
+  if (lan) lan.rotation.x = -s * 0.25
+  if (ran) ran.rotation.x =  s * 0.25
   // 躯干微微左右摇
-  if (sp) sp.rotation.z =  s * 0.04
+  if (sp) sp.rotation.z =  s * 0.03
 }
 
 function applyIdle(dt) {
